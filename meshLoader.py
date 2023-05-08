@@ -6,7 +6,7 @@ import MinkowskiEngine as ME
 import torch
 
 
-def resample_mesh(faces, vertices, density=1):
+def resample_mesh(faces, vertices, density=50):
     """
     https://chrischoy.github.io/research/barycentric-coordinate-for-mesh-sampling/
     Samples point cloud on the surface of the model defined as vectices and
@@ -72,7 +72,7 @@ class MeshLoader(Dataset):
         self,
         dataset,
         num_points = 2048,
-        resolution = 128
+        resolution = 256
     ):
         Dataset.__init__(self)
         self.dataset = dataset
@@ -126,4 +126,6 @@ class MeshLoader(Dataset):
             "coordinates":xyz,
             "label":label,
             "features":feats,
+            "verts":verts,
+            "faces":faces,
         }

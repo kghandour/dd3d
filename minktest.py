@@ -6,7 +6,8 @@ from torch.utils.data import Dataset, DataLoader
 from meshLoader import MeshLoader
 from pytorch3d.io import IO
 from pytorch3d.structures import Pointclouds
-
+from pytorch3d.renderer import TexturesVertex
+from pytorch3d.structures import Meshes
 
 
 def minkowski_collate_fn(list_data):
@@ -51,10 +52,24 @@ if __name__=="__main__":
 
     print(shapenet_dataset[0].keys())
     pcd = MeshLoader(shapenet_dataset)
+
+    ## Create Mesh
+    shapenet_model = shapenet_dataset[0]
+    model_verts, model_faces = shapenet_model["verts"], shapenet_model["faces"]
+    model_textures = TexturesVertex(verts_features=torch.ones_like(model_verts, device=device)[None])
+    shapenet_model_mesh = Meshes(
+        verts=[model_verts.to(device)],   
+        faces=[model_faces.to(device)],
+        textures=model_textures
+    )
+
+    IO().save_mesh(shapenet_model_mesh, "output_mesh.obj")
+
     shapenet_loader = DataLoader(pcd, batch_size=1, collate_fn=minkowski_collate_fn)
     print(len(shapenet_loader))
     it = iter(shapenet_loader)
     shapenet_batch = next(it)
     batch_renderings = shapenet_batch
-    print(batch_renderings)
-    pcd = Pointclouds(batch_renderings["coordinates"])
+    pcl = Pointclouds([pcd[0]["coordinates"]])
+    IO().save_pointcloud(pcl, "output_pcd.ply")
+    # pointcloud = Pointclouds(batch_renderings["coordinates"])
