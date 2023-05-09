@@ -6,7 +6,7 @@ import MinkowskiEngine as ME
 import torch
 
 
-def resample_mesh(faces, vertices, density=50):
+def resample_mesh(faces, vertices, density=1000):
     """
     https://chrischoy.github.io/research/barycentric-coordinate-for-mesh-sampling/
     Samples point cloud on the surface of the model defined as vectices and
@@ -72,15 +72,14 @@ class MeshLoader(Dataset):
         self,
         dataset,
         num_points = 2048,
-        resolution = 256
+        sample_density = 1000,
+        quantization_size = 1,
     ):
         Dataset.__init__(self)
         self.dataset = dataset
         self.num_points = num_points
-        self.resolution = resolution
-        self.cache = [None]*len(dataset)
-        self.last_cache_percent = 0
-        self.phase = "train"
+        self.sample_density = sample_density
+        self.quantization_size = quantization_size
 
     def __len__(self):
         return len(self.dataset)
@@ -91,39 +90,21 @@ class MeshLoader(Dataset):
         faces = self.dataset[index]["faces"]
         textures = self.dataset[index]["textures"]
 
-        # if index in self.cache:
-        #     xyz = self.cache[index]
-        # else:
-        xyz = resample_mesh(vertices=verts, faces=faces)
+        xyz = resample_mesh(vertices=verts, faces=faces, density=self.sample_density)
 
         if len(xyz) > self.num_points:
             xyz = xyz[: self.num_points]
-        # self.cache[index] = xyz
-        # cache_percent = int((len(self.cache) / len(self)) * 100)
-        # if (
-        #     cache_percent > 0
-        #     and cache_percent % 10 == 0
-        #     and cache_percent != self.last_cache_percent
-        # ):
-        #     logging.info(
-        #         f"Cached {self.phase}: {len(self.cache)} / {len(self)}: {cache_percent}%"
-        #     )
-        #     self.last_cache_percent = cache_percent
-    
-        # Use color or other features if available
+
         feats = torch.ones((len(xyz), 1))
 
-        # if len(xyz) < 1000:
-        #     logging.info(
-        #         f"Skipping {self.dataset[index]['model_id']}: does not have sufficient CAD sampling density after resampling: {len(xyz)}."
-        #     )
-        #     return None
+        coords, feats, labels = ME.utils.sparse_quantize(
+            coordinates=xyz,
+            features=feats,
+            labels=label,
+            quantization_size=self.sample_density)
 
-        xyz = xyz * self.resolution
-        # coords, inds = ME.utils.sparse_quantize(xyz, return_index=True)
-        # print("coordinates length after", len(coords))
         return {
-            "coordinates":xyz,
+            "coordinates":coords,
             "label":label,
             "features":feats,
             "verts":verts,
