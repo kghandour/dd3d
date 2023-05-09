@@ -28,6 +28,32 @@ import MinkowskiEngine as ME
 from torch.utils.tensorboard import SummaryWriter
 import torch
 from me_network import criterion
+from augmentation import CoordinateTranslation, CoordinateTransformation
+from torch.utils.data import DataLoader
+
+def minkowski_collate_fn(list_data):
+    coordinates_batch, features_batch, labels_batch = ME.utils.sparse_collate(
+        [d["coordinates"] for d in list_data],
+        [d["features"] for d in list_data],
+        [d["label"] for d in list_data],
+        dtype=torch.float32,
+    )
+    return {
+        "coordinates": coordinates_batch,
+        "features": features_batch,
+        "labels": labels_batch,
+    }
+
+def create_input_batch(batch, is_minknet, device="cuda", quantization_size=0.05):
+    if is_minknet:
+        batch["coordinates"][:, 1:] = batch["coordinates"][:, 1:] / quantization_size
+        return ME.TensorField(
+            coordinates=batch["coordinates"],
+            features=batch["features"],
+            device=device,
+        )
+    else:
+        return batch["coordinates"].permute(0, 2, 1).to(device)
 
 def make_data_loader(phase, is_minknet, config):
     assert phase in ["train", "val", "test"]
@@ -43,7 +69,7 @@ def make_data_loader(phase, is_minknet, config):
         dataset,
         num_workers=config.num_workers,
         shuffle=is_train,
-        collate_fn=minkowski_collate_fn if is_minknet else stack_collate_fn,
+        collate_fn=minkowski_collate_fn,
         batch_size=config.batch_size,
     )
 

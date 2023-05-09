@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.linalg import expm, norm
+import random
 
 class RandomRotation:
 
@@ -45,3 +46,28 @@ class CoordinateTranslation:
         if self.trans > 0:
             coords += np.random.uniform(low=-self.trans, high=self.trans, size=[1, 3])
         return coords
+    
+class CoordinateTransformation:
+    def __init__(self, scale_range=(0.9, 1.1), trans=0.25, jitter=0.025, clip=0.05):
+        self.scale_range = scale_range
+        self.trans = trans
+        self.jitter = jitter
+        self.clip = clip
+
+    def __call__(self, coords):
+        if random.random() < 0.9:
+            coords *= np.random.uniform(
+                low=self.scale_range[0], high=self.scale_range[1], size=[1, 3]
+            )
+        if random.random() < 0.9:
+            coords += np.random.uniform(low=-self.trans, high=self.trans, size=[1, 3])
+        if random.random() < 0.7:
+            coords += np.clip(
+                self.jitter * (np.random.rand(len(coords), 3) - 0.5),
+                -self.clip,
+                self.clip,
+            )
+        return coords
+
+    def __repr__(self):
+        return f"Transformation(scale={self.scale_range}, translation={self.trans}, jitter={self.jitter})"
