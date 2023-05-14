@@ -3,7 +3,7 @@ import torch
 import pytorch3d
 from pytorch3d.datasets import ShapeNetCore
 from torch.utils.data import Dataset, DataLoader
-from meshLoader import MeshLoader
+from temp_py.meshLoader import MeshLoader
 from pytorch3d.io import IO
 from pytorch3d.structures import Pointclouds
 from pytorch3d.renderer import TexturesVertex

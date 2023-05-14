@@ -1,0 +1,80 @@
+import torch
+from torch.utils.data import Dataset, DataLoader
+import os
+import glob
+import open3d as o3d
+import numpy as np
+from augmentation import CoordinateTransformation, CoordinateTranslation
+from me_classification import minkowski_collate_fn
+
+
+
+class ShapeNetPCD(Dataset):
+    def __init__(
+            self,
+            phase: str,
+            data_root: str,
+            transform = None,
+            num_points = 2048
+        ) -> None:
+        Dataset.__init__(self)
+        phase = "test" if phase in ["val", "test"] else "train"
+        self.data, self.label = self.load_data(data_root, phase)
+        self.transform = transform
+        self.phase = phase
+        self.num_points = num_points
+
+    def load_data(self, data_root, phase):
+        data, labels = [], []
+        assert os.path.exists(data_root), f"{data_root} does not exist"
+        for cls in os.listdir(data_root):
+            files = glob.glob(os.path.join(data_root,cls, "*.ply"))
+            assert len(files) > 0, "No files found"
+            for ply in files:
+                pcd = o3d.io.read_point_cloud(os.path.join(files,ply))
+                np_verts = np.asarray(pcd.points)
+                labels.append(cls)
+                data.append(np_verts)
+        return data, labels
+    
+    def __getitem__(self, i):
+        xyz = self.data[i]
+        if self.phase == "train":
+            np.random.shuffle(xyz)
+        if len(xyz) > self.num_points:
+            xyz = xyz[: self.num_points]
+        if self.transform is not None:
+            xyz = self.transform(xyz)
+        label = self.label[i]
+        xyz = torch.from_numpy(xyz)
+        label = torch.from_numpy(label)
+        return {
+            "coordinates": xyz.to(torch.float32),
+            "features": xyz.to(torch.float32),
+            "label": label,
+        }
+    
+    def __len__(self):
+        return self.data.shape[0]
+
+    def __repr__(self):
+        return f"ModelNet40H5(phase={self.phase}, length={len(self)}, transform={self.transform})"
+
+
+def make_data_loader(phase, config):
+    assert phase in ["train", "val", "test"]
+    is_train = phase == "train"
+    dataset = ShapeNetPCD(
+        phase = phase,
+        transform=CoordinateTransformation(trans=config.get("translation"))
+        if is_train
+        else CoordinateTranslation(config.get("test_translation")),
+        data_root=config.get("shapenet_path")
+    )
+    return DataLoader(
+        dataset=dataset,
+        num_workers=config.get("num_workers"),
+        shuffle=is_train,
+        collate_fn=minkowski_collate_fn,
+        batch_size=config.get("batch_size")
+    )
