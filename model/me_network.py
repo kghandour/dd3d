@@ -15,6 +15,7 @@ class MinkowskiFCNN(ME.MinkowskiNetwork):
         embedding_channel=1024,
         channels=(32, 48, 64, 96, 128),
         D=3,
+        overfit_1 = False
     ):
         ME.MinkowskiNetwork.__init__(self, D)
 
@@ -25,17 +26,34 @@ class MinkowskiFCNN(ME.MinkowskiNetwork):
             embedding_channel=embedding_channel,
             kernel_size=3,
             D=D,
+            overfit_1= overfit_1
         )
         self.weight_initialization()
 
-    def get_mlp_block(self, in_channel, out_channel):
+    def get_mlp_block(self, in_channel, out_channel, overfit_1):
+        if(overfit_1): 
+            return nn.Sequential(
+                ME.MinkowskiLinear(in_channel, out_channel, bias=False),
+                ME.MinkowskiLeakyReLU(),
+            )
         return nn.Sequential(
             ME.MinkowskiLinear(in_channel, out_channel, bias=False),
             ME.MinkowskiBatchNorm(out_channel),
             ME.MinkowskiLeakyReLU(),
         )
 
-    def get_conv_block(self, in_channel, out_channel, kernel_size, stride):
+    def get_conv_block(self, in_channel, out_channel, kernel_size, stride, overfit_1):
+        if(overfit_1):
+            return nn.Sequential(
+                ME.MinkowskiConvolution(
+                    in_channel,
+                    out_channel,
+                    kernel_size=kernel_size,
+                    stride=stride,
+                    dimension=self.D,
+                ),
+                ME.MinkowskiLeakyReLU(),
+            )
         return nn.Sequential(
             ME.MinkowskiConvolution(
                 in_channel,
@@ -56,19 +74,22 @@ class MinkowskiFCNN(ME.MinkowskiNetwork):
         embedding_channel,
         kernel_size,
         D=3,
+        overfit_1 = False
     ):
-        self.mlp1 = self.get_mlp_block(in_channel, channels[0])
+        self.mlp1 = self.get_mlp_block(in_channel, channels[0], overfit_1)
         self.conv1 = self.get_conv_block(
             channels[0],
             channels[1],
             kernel_size=kernel_size,
             stride=1,
+            overfit_1=overfit_1
         )
         self.conv2 = self.get_conv_block(
             channels[1],
             channels[2],
             kernel_size=kernel_size,
             stride=2,
+            overfit_1=overfit_1
         )
 
         self.conv3 = self.get_conv_block(
@@ -76,6 +97,7 @@ class MinkowskiFCNN(ME.MinkowskiNetwork):
             channels[3],
             kernel_size=kernel_size,
             stride=2,
+            overfit_1=overfit_1
         )
 
         self.conv4 = self.get_conv_block(
@@ -83,6 +105,7 @@ class MinkowskiFCNN(ME.MinkowskiNetwork):
             channels[4],
             kernel_size=kernel_size,
             stride=2,
+            overfit_1=overfit_1
         )
         self.conv5 = nn.Sequential(
             self.get_conv_block(
@@ -90,18 +113,21 @@ class MinkowskiFCNN(ME.MinkowskiNetwork):
                 embedding_channel // 4,
                 kernel_size=3,
                 stride=2,
+                overfit_1=overfit_1
             ),
             self.get_conv_block(
                 embedding_channel // 4,
                 embedding_channel // 2,
                 kernel_size=3,
                 stride=2,
+                overfit_1=overfit_1
             ),
             self.get_conv_block(
                 embedding_channel // 2,
                 embedding_channel,
                 kernel_size=3,
                 stride=2,
+                overfit_1=overfit_1 
             ),
         )
 
@@ -111,9 +137,9 @@ class MinkowskiFCNN(ME.MinkowskiNetwork):
         self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
 
         self.final = nn.Sequential(
-            self.get_mlp_block(embedding_channel * 2, 512),
+            self.get_mlp_block(embedding_channel * 2, 512, overfit_1=overfit_1),
             ME.MinkowskiDropout(),
-            self.get_mlp_block(512, 512),
+            self.get_mlp_block(512, 512, overfit_1=overfit_1),
             ME.MinkowskiLinear(512, out_channel, bias=True),
         )
 
@@ -169,14 +195,14 @@ class GlobalMaxAvgPool(torch.nn.Module):
         y = self.global_avg_pool(tensor)
         return ME.cat(x, y)
     
-def criterion(pred, labels, smoothing=True):
+def criterion(pred, labels, overfit_1=False, smoothing=False):
     """Calculate cross entropy loss, apply label smoothing if needed."""
 
     labels = labels.contiguous().view(-1)
     if smoothing:
         eps = 0.2
         n_class = pred.size(1)
-
+        if(overfit_1): n_class=2
         one_hot = torch.zeros_like(pred).scatter(1, labels.view(-1, 1), 1)
         one_hot = one_hot * (1 - eps) + (1 - one_hot) * eps / (n_class - 1)
         log_prb = F.log_softmax(pred, dim=1)

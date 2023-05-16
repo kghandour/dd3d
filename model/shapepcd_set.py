@@ -29,20 +29,27 @@ class ShapeNetPCD(Dataset):
             # phase: str,
             data_root: str,
             transform = None,
-            num_points = 2048
+            num_points = 2048,
+            overfit_1 = False
         ) -> None:
         Dataset.__init__(self)
         # phase = "test" if phase in ["val", "test"] else "train"
-        self.data, self.label = self.load_data(data_root)
+        self.data, self.label = self.load_data(data_root, overfit_1)
         self.transform = transform
         self.num_points = num_points
+        self.overfit_1 = overfit_1
 
-    def load_data(self, data_root):
+    def load_data(self, data_root, overfit_1):
         data, labels = [], []
         assert os.path.exists(data_root), f"{data_root} does not exist"
         for cls in os.listdir(data_root):
             files = os.path.join(data_root,cls)
             assert len(os.listdir(files)) > 0, "No files found"
+            if(overfit_1):
+                for ply in tqdm(os.listdir(files)[:2]):
+                    labels.append(class_id[cls])
+                    data.append(os.path.join(files,ply))
+                break
             for ply in tqdm(os.listdir(files)):
                 labels.append(class_id[cls])
                 data.append(os.path.join(files,ply))

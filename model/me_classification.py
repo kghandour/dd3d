@@ -58,7 +58,7 @@ def test(net, device, config, val_loader, phase="val"):
             torch.cuda.empty_cache()
     return metrics.accuracy_score(np.concatenate(labels), np.concatenate(preds))
 
-def train(net, device, config, writer, train_dataloader, val_loader):
+def train(net, device, config, writer, train_dataloader, val_loader, overfit_1=False):
     optimizer = optim.SGD(
         net.parameters(),
         lr=float(config.get("lr")),
@@ -86,7 +86,7 @@ def train(net, device, config, writer, train_dataloader, val_loader):
             data_dict, device=device, quantization_size=float(config.get("voxel_size"))
         )
         logit = net(input)
-        loss = criterion(logit, data_dict["labels"].to(device))
+        loss = criterion(logit, data_dict["labels"].to(device), overfit_1=overfit_1)
         loss.backward()
         optimizer.step()
         scheduler.step()
