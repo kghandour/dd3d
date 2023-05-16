@@ -1,8 +1,17 @@
 from pytorch3d.datasets import ShapeNetCore
 import configparser
 import torch
+from model.augmentation import CoordinateTransformation
 from model.me_network import MinkowskiFCNN
 from model.me_classification import train, test
+from torch.utils.tensorboard import SummaryWriter
+import time
+import os
+from torch.utils.data.sampler import SubsetRandomSampler
+import numpy as np
+
+
+from model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
 
 if __name__=="__main__":
     config = configparser.ConfigParser()
@@ -16,14 +25,39 @@ if __name__=="__main__":
     print("=============================================\n\n")
 
     net = MinkowskiFCNN(
-        in_channel=3, out_channel=2, embedding_channel=1024
+        in_channel=3, out_channel=55, embedding_channel=1024
     ).to(device)
     print("===================Network===================")
     print(net)
     print("=============================================\n\n")
+    print("==================Init Logger===============\n\n")
+    writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),def_conf.get("exp_name")+str(time.time()))) #initialize sumamry writer
+    print("Initialized to ", os.path.join(def_conf.get("log_dir"),def_conf.get("exp_name")+str(time.time())))
+    dataset = ShapeNetPCD(
+        transform=CoordinateTransformation(trans=float(def_conf.get("train_translation"))),
+        data_root=def_conf.get("shapenet_path")
+    )
+    dataset_size = len(dataset)
+    indices = list(range(dataset_size))
+    split = int(np.floor(float(def_conf.get("validation_split")) * dataset_size))
+    if bool(def_conf.get("shuffle_dataset")) :
+        np.random.seed(int(def_conf.get("random_seed")))
+        np.random.shuffle(indices)
+    train_indices, val_indices = indices[split:], indices[:split]
+    train_sampler = SubsetRandomSampler(train_indices)
+    valid_sampler = SubsetRandomSampler(val_indices)
 
-    train(net, device, config)
-    accuracy = test(net, device, config, phase="test")
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=int(def_conf.get("batch_size")), 
+                                            sampler=train_sampler, 
+                                            collate_fn=minkowski_collate_fn,
+                                            )
+    validation_loader = torch.utils.data.DataLoader(dataset, batch_size=int(def_conf.get("batch_size")),
+                                                    sampler=valid_sampler,
+                                                    collate_fn=minkowski_collate_fn,)
+
+    train(net, device, def_conf, writer, train_dataloader=train_loader, val_loader=validation_loader)
+
+    accuracy = test(net, device, def_conf, phase="test")
     print(f"Test accuracy: {accuracy}")
     
 

@@ -22,65 +22,68 @@
 # Please cite "4D Spatio-Temporal ConvNets: Minkowski Convolutional Neural
 # Networks", CVPR'19 (https://arxiv.org/abs/1904.08755) if you use any part
 # of the code.
+import time
 
 import torch.optim as optim
 import MinkowskiEngine as ME
 from torch.utils.tensorboard import SummaryWriter
 import torch
-from me_network import criterion
-from shapepcd_set import make_data_loader
+from model.me_network import criterion
+import sklearn.metrics as metrics
+import numpy as np
 
-def minkowski_collate_fn(list_data):
-    coordinates_batch, features_batch, labels_batch = ME.utils.sparse_collate(
-        [d["coordinates"] for d in list_data],
-        [d["features"] for d in list_data],
-        [d["label"] for d in list_data],
-        dtype=torch.float32,
+def create_input_batch(batch, device="cuda", quantization_size=0.05):
+    batch["coordinates"][:, 1:] = batch["coordinates"][:, 1:] / quantization_size
+    return ME.TensorField(
+        coordinates=batch["coordinates"],
+        features=batch["features"],
+        device=device,
     )
-    return {
-        "coordinates": coordinates_batch,
-        "features": features_batch,
-        "labels": labels_batch,
-    }
+   
+def test(net, device, config, val_loader, phase="val"):
 
-def create_input_batch(batch, is_minknet, device="cuda", quantization_size=0.05):
-    if is_minknet:
-        batch["coordinates"][:, 1:] = batch["coordinates"][:, 1:] / quantization_size
-        return ME.TensorField(
-            coordinates=batch["coordinates"],
-            features=batch["features"],
-            device=device,
-        )
-    else:
-        return batch["coordinates"].permute(0, 2, 1).to(device)
+    net.eval()
+    labels, preds = [], []
+    with torch.no_grad():
+        for batch in val_loader:
+            input = create_input_batch(
+                batch,
+                device=device,
+                quantization_size=float(config.get("voxel_size")),
+            )
+            logit = net(input)
+            pred = torch.argmax(logit, 1)
+            labels.append(batch["labels"].cpu().numpy())
+            preds.append(pred.cpu().numpy())
+            torch.cuda.empty_cache()
+    return metrics.accuracy_score(np.concatenate(labels), np.concatenate(preds))
 
-def train(net, device, config):
-    is_minknet = isinstance(net, ME.MinkowskiNetwork)
+def train(net, device, config, writer, train_dataloader, val_loader):
     optimizer = optim.SGD(
         net.parameters(),
-        lr=config.lr,
+        lr=float(config.get("lr")),
         momentum=0.9,
-        weight_decay=config.weight_decay,
+        weight_decay=float(config.get("weight_decay")),
     )
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max=config.max_steps,
+        T_max=int(config.get("max_steps")),
     )
     print(optimizer)
     print(scheduler)
-
-    train_iter = iter(make_data_loader("train", is_minknet, config))
+    train_iter = iter(train_dataloader)
     best_metric = 0
     net.train()
-    for i in range(config.max_steps):
+    for i in range(int(config.get("max_steps"))):
         optimizer.zero_grad()
+        startTime = time.time()
         try:
-            data_dict = train_iter.next()
+            data_dict = next(train_iter)
         except StopIteration:
-            train_iter = iter(make_data_loader("train", is_minknet, config))
-            data_dict = train_iter.next()
+            train_iter = iter(train_dataloader)
+            data_dict = next(train_iter)
         input = create_input_batch(
-            data_dict, is_minknet, device=device, quantization_size=config.voxel_size
+            data_dict, device=device, quantization_size=float(config.get("voxel_size"))
         )
         logit = net(input)
         loss = criterion(logit, data_dict["labels"].to(device))
@@ -88,11 +91,15 @@ def train(net, device, config):
         optimizer.step()
         scheduler.step()
         torch.cuda.empty_cache()
+        endTime = time.time()
 
-        if i % config.stat_freq == 0:
+        if i % int(config.get("stat_freq")) == 0:
             print(f"Iter: {i}, Loss: {loss.item():.3e}")
+            writer.add_scalar('loss_epoch/training', loss.item(), i) 
+            writer.add_scalar('time_epoch/training', ((endTime - startTime)*1000), i)
 
-        if i % config.val_freq == 0 and i > 0:
+        if i % int(config.get("val_freq")) == 0 and i > 0:
+            startTime_val = time.time()
             torch.save(
                 {
                     "state_dict": net.state_dict(),
@@ -100,10 +107,13 @@ def train(net, device, config):
                     "scheduler": scheduler.state_dict(),
                     "curr_iter": i,
                 },
-                config.weights,
+                config.get("weights"),
             )
-            accuracy = test(net, device, config, phase="val")
+            accuracy = test(net, device, config, phase="val", val_loader=val_loader)
+            endTime_val = time.time()
             if best_metric < accuracy:
                 best_metric = accuracy
+            writer.add_scalar('accuracy/val', accuracy, i) 
+            writer.add_scalar('time_epoch/training', ((endTime_val - startTime_val)*1000), i)
             print(f"Validation accuracy: {accuracy}. Best accuracy: {best_metric}")
             net.train()

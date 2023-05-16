@@ -44,7 +44,7 @@ class CoordinateTranslation:
 
     def __call__(self, coords):
         if self.trans > 0:
-            coords += np.random.uniform(low=-self.trans, high=self.trans, size=[1, 3])
+            coords += np.random.uniform(low=-1*self.trans, high=self.trans, size=[1, 3])
         return coords
     
 class CoordinateTransformation:
@@ -60,7 +60,7 @@ class CoordinateTransformation:
                 low=self.scale_range[0], high=self.scale_range[1], size=[1, 3]
             )
         if random.random() < 0.9:
-            coords += np.random.uniform(low=-self.trans, high=self.trans, size=[1, 3])
+            coords += np.random.uniform(low=-1*self.trans, high=self.trans, size=[1, 3])
         if random.random() < 0.7:
             coords += np.clip(
                 self.jitter * (np.random.rand(len(coords), 3) - 0.5),
