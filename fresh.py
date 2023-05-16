@@ -22,9 +22,9 @@ if __name__=="__main__":
     target_class = def_conf.get("binary_class_name")
     exp_name = def_conf.get("exp_name") +target_class+"_"+str(time.time())
 
-    print("=====OVERFITTING?====", overfit_1)
+    print("Overfitting Experiment? ", overfit_1)
 
-    print("===================ModelNet40 Dataset===================")
+    print("=============ShapeNet PCD Dataset===============")
     print(f"Training with translation", def_conf.get("train_translation"))
     print(f"Evaluating with translation", def_conf.get("train_translation"))
     print("=============================================\n\n")
