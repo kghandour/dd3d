@@ -86,7 +86,7 @@ def train(net, device, config, writer, train_dataloader, val_loader, overfit_1=F
             data_dict, device=device, quantization_size=float(config.get("voxel_size"))
         )
         logit = net(input)
-        loss = criterion(logit, data_dict["labels"].to(device), overfit_1=overfit_1)
+        loss = criterion(logit, data_dict["labels"].to(device))
         loss.backward()
         optimizer.step()
         scheduler.step()

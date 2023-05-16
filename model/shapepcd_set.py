@@ -28,31 +28,40 @@ class ShapeNetPCD(Dataset):
             self,
             # phase: str,
             data_root: str,
+            config,
             transform = None,
             num_points = 2048,
-            overfit_1 = False
         ) -> None:
         Dataset.__init__(self)
+        overfit_1 = bool(config.getboolean("overfit_1"))
+        cls_name = config.get("binary_class_name")
         # phase = "test" if phase in ["val", "test"] else "train"
-        self.data, self.label = self.load_data(data_root, overfit_1)
+        self.data, self.label = self.load_data(data_root, overfit_1, cls_name)
         self.transform = transform
         self.num_points = num_points
         self.overfit_1 = overfit_1
 
-    def load_data(self, data_root, overfit_1):
+    def load_data(self, data_root, overfit_1, cls_name):
         data, labels = [], []
         assert os.path.exists(data_root), f"{data_root} does not exist"
+        target_class_dir = os.path.join(data_root,cls_name)
+        if(overfit_1):
+            for ply in tqdm(os.listdir(target_class_dir)[:2]):
+                labels.append(class_id[cls_name])
+                data.append(os.path.join(target_class_dir,ply))
+            return np.asarray(data),  torch.from_numpy(np.asarray(labels))
+
+        for ply in tqdm(os.listdir(target_class_dir)):
+                labels.append(class_id[cls_name])
+                data.append(os.path.join(target_class_dir,ply))
         for cls in os.listdir(data_root):
+            if(cls == cls_name): pass
             files = os.path.join(data_root,cls)
             assert len(os.listdir(files)) > 0, "No files found"
-            if(overfit_1):
-                for ply in tqdm(os.listdir(files)[:2]):
-                    labels.append(class_id[cls])
-                    data.append(os.path.join(files,ply))
-                break
-            for ply in tqdm(os.listdir(files)):
-                labels.append(class_id[cls])
+            for ply in tqdm(os.listdir(files)[:200]):
+                labels.append(-1)
                 data.append(os.path.join(files,ply))
+
         return np.asarray(data),  torch.from_numpy(np.asarray(labels))
     
     def __getitem__(self, i):

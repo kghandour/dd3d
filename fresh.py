@@ -18,7 +18,8 @@ if __name__=="__main__":
     config.read("config.ini")
     def_conf = config["DEFAULT"]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    overfit_1 = bool(def_conf.get("overfit_1"))
+    overfit_1 = bool(def_conf.getboolean("overfit_1"))
+    print("=====OVERFITTING?====", overfit_1)
 
     print("===================ModelNet40 Dataset===================")
     print(f"Training with translation", def_conf.get("train_translation"))
@@ -28,10 +29,6 @@ if __name__=="__main__":
     net = MinkowskiFCNN(
         in_channel=3, out_channel=2, embedding_channel=1024, overfit_1=overfit_1
     ).to(device)
-    if not overfit_1:
-        net = MinkowskiFCNN(
-            in_channel=3, out_channel=55, embedding_channel=1024, overfit_1=overfit_1
-        ).to(device)
 
     print("===================Network===================")
     print(net)
@@ -42,8 +39,9 @@ if __name__=="__main__":
     dataset = ShapeNetPCD(
         transform=CoordinateTransformation(trans=float(def_conf.get("train_translation"))),
         data_root=def_conf.get("shapenet_path"),
-        overfit_1=overfit_1
+        config = def_conf
     )
+
     dataset_size = len(dataset)
     indices = list(range(dataset_size))
     split = int(np.floor(float(def_conf.get("validation_split")) * dataset_size))
@@ -58,12 +56,12 @@ if __name__=="__main__":
     if(overfit_1): batch_size = 1
 
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, 
-                                            sampler=train_sampler, 
-                                            collate_fn=minkowski_collate_fn,
-                                            )
+        sampler=train_sampler, 
+        collate_fn=minkowski_collate_fn,
+        )
     validation_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
-                                                    sampler=valid_sampler,
-                                                    collate_fn=minkowski_collate_fn,)
+        sampler=valid_sampler,
+        collate_fn=minkowski_collate_fn,)
 
     train(net, device, def_conf, writer, train_dataloader=train_loader, val_loader=validation_loader, overfit_1=overfit_1)
 

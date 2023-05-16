@@ -195,14 +195,14 @@ class GlobalMaxAvgPool(torch.nn.Module):
         y = self.global_avg_pool(tensor)
         return ME.cat(x, y)
     
-def criterion(pred, labels, overfit_1=False, smoothing=False):
+def criterion(pred, labels, smoothing=False):
     """Calculate cross entropy loss, apply label smoothing if needed."""
+    print(labels.shape, pred.shape)
 
     labels = labels.contiguous().view(-1)
     if smoothing:
         eps = 0.2
         n_class = pred.size(1)
-        if(overfit_1): n_class=2
         one_hot = torch.zeros_like(pred).scatter(1, labels.view(-1, 1), 1)
         one_hot = one_hot * (1 - eps) + (1 - one_hot) * eps / (n_class - 1)
         log_prb = F.log_softmax(pred, dim=1)
