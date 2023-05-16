@@ -70,7 +70,7 @@ class ShapeNetPCD(Dataset):
         downpcd = pcd.voxel_down_sample(voxel_size=0.025)
         xyz = np.asarray(downpcd.points)
         # if self.phase == "train":
-        #     np.random.shuffle(xyz)
+        np.random.shuffle(xyz)
         if len(xyz) > self.num_points:
             xyz = xyz[: self.num_points]
         if self.transform is not None:

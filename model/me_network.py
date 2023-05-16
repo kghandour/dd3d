@@ -198,7 +198,7 @@ class GlobalMaxAvgPool(torch.nn.Module):
 def criterion(pred, labels, smoothing=False):
     """Calculate cross entropy loss, apply label smoothing if needed."""
 
-    labels = labels.contiguous().view(-1)
+    labels = labels.contiguous().view(-1).to(torch.float32)
     if smoothing:
         eps = 0.2
         n_class = pred.size(1)
@@ -208,6 +208,7 @@ def criterion(pred, labels, smoothing=False):
 
         loss = -(one_hot * log_prb).sum(dim=1).mean()
     else:
-        loss = F.cross_entropy(pred, labels, reduction="mean")
+        # loss = F.cross_entropy(pred, labels, reduction="mean")
+        loss = F.binary_cross_entropy(torch.sigmoid(pred).squeeze(), labels)
 
     return loss

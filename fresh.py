@@ -30,7 +30,7 @@ if __name__=="__main__":
     print("=============================================\n\n")
 
     net = MinkowskiFCNN(
-        in_channel=3, out_channel=2, embedding_channel=1024, overfit_1=overfit_1
+        in_channel=3, out_channel=1, embedding_channel=1024, overfit_1=overfit_1
     ).to(device)
 
     print("===================Network===================")

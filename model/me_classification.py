@@ -52,7 +52,7 @@ def test(net, device, config, val_loader, phase="val"):
                 quantization_size=float(config.get("voxel_size")),
             )
             logit = net(input)
-            pred = torch.argmax(logit, 1)
+            pred = torch.round(torch.sigmoid(logit))
             labels.append(batch["labels"].cpu().numpy())
             preds.append(pred.cpu().numpy())
             torch.cuda.empty_cache()
