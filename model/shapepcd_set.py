@@ -47,26 +47,26 @@ class ShapeNetPCD(Dataset):
         target_class_dir = os.path.join(data_root,cls_name)
         if(overfit_1):
             for ply in tqdm(os.listdir(target_class_dir)[:2]):
-                labels.append(class_id[cls_name])
+                labels.append(1)
                 data.append(os.path.join(target_class_dir,ply))
             return np.asarray(data),  torch.from_numpy(np.asarray(labels))
 
         for ply in tqdm(os.listdir(target_class_dir)):
-                labels.append(class_id[cls_name])
+                labels.append(1)
                 data.append(os.path.join(target_class_dir,ply))
         for cls in os.listdir(data_root):
             if(cls == cls_name): pass
             files = os.path.join(data_root,cls)
             assert len(os.listdir(files)) > 0, "No files found"
             for ply in tqdm(os.listdir(files)[:200]):
-                labels.append(-1)
+                labels.append(0)
                 data.append(os.path.join(files,ply))
 
         return np.asarray(data),  torch.from_numpy(np.asarray(labels))
     
     def __getitem__(self, i):
         pcd = o3d.io.read_point_cloud(self.data[i])
-        downpcd = pcd.voxel_down_sample(voxel_size=0.01)
+        downpcd = pcd.voxel_down_sample(voxel_size=0.05)
         xyz = np.asarray(downpcd.points)
         # if self.phase == "train":
         #     np.random.shuffle(xyz)

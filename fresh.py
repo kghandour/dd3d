@@ -19,6 +19,9 @@ if __name__=="__main__":
     def_conf = config["DEFAULT"]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     overfit_1 = bool(def_conf.getboolean("overfit_1"))
+    target_class = def_conf.get("binary_class_name")
+    exp_name = def_conf.get("exp_name") +target_class+"_"+str(time.time())
+
     print("=====OVERFITTING?====", overfit_1)
 
     print("===================ModelNet40 Dataset===================")
@@ -34,8 +37,9 @@ if __name__=="__main__":
     print(net)
     print("=============================================\n\n")
     print("==================Init Logger===============\n\n")
-    writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),def_conf.get("exp_name")+str(time.time()))) #initialize sumamry writer
-    print("Initialized to ", os.path.join(def_conf.get("log_dir"),def_conf.get("exp_name")+str(time.time())))
+
+    writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),exp_name)) #initialize sumamry writer
+    print("Initialized to ", os.path.join(def_conf.get("log_dir"),exp_name))
     dataset = ShapeNetPCD(
         transform=CoordinateTransformation(trans=float(def_conf.get("train_translation"))),
         data_root=def_conf.get("shapenet_path"),

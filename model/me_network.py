@@ -197,7 +197,6 @@ class GlobalMaxAvgPool(torch.nn.Module):
     
 def criterion(pred, labels, smoothing=False):
     """Calculate cross entropy loss, apply label smoothing if needed."""
-    print(labels.shape, pred.shape)
 
     labels = labels.contiguous().view(-1)
     if smoothing:
