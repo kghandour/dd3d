@@ -1,3 +1,5 @@
 *.obj
 *.ply
 *.png
+__pycache__/
+*.model
