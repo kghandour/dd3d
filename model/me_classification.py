@@ -58,7 +58,7 @@ def test(net, device, config, val_loader, phase="val"):
             torch.cuda.empty_cache()
     return metrics.accuracy_score(np.concatenate(labels), np.concatenate(preds))
 
-def train(net, device, config, writer, train_dataloader, val_loader, overfit_1=False):
+def train(net, device, config, writer, train_dataloader, val_loader):
     optimizer = optim.SGD(
         net.parameters(),
         lr=float(config.get("lr")),
@@ -69,6 +69,7 @@ def train(net, device, config, writer, train_dataloader, val_loader, overfit_1=F
         optimizer,
         T_max=int(config.get("max_steps")),
     )
+    epoch_ct = 0
     print(optimizer)
     print(scheduler)
     train_iter = iter(train_dataloader)
@@ -93,12 +94,14 @@ def train(net, device, config, writer, train_dataloader, val_loader, overfit_1=F
         torch.cuda.empty_cache()
         endTime = time.time()
 
-        if i % int(config.get("stat_freq")) == 0:
-            print(f"Iter: {i}, Loss: {loss.item():.3e}")
-            writer.add_scalar('loss_epoch/training', loss.item(), i) 
-            writer.add_scalar('time_epoch/training', ((endTime - startTime)*1000), i)
+        if i % int(config.get("stat_freq")) == 0 and i > 0:
+            print(f"Iteration: {i}, Loss: {loss.item():.3e}")
+            writer.add_scalar('loss/training_iter', loss.item(), i) 
+            writer.add_scalar('time/training_iter', ((endTime - startTime)*1000), i)
 
-        if i % int(config.get("val_freq")) == 0 and i > 0:
+        if i % len(train_dataloader) == 0 and i > 0:
+            epoch_ct +=1
+            writer.add_scalar('loss/training_epoch', loss.item(), epoch_ct) 
             startTime_val = time.time()
             torch.save(
                 {
@@ -107,13 +110,13 @@ def train(net, device, config, writer, train_dataloader, val_loader, overfit_1=F
                     "scheduler": scheduler.state_dict(),
                     "curr_iter": i,
                 },
-                config.get("weights"),
+                config.get("weights")+"_"+str(epoch_ct)+".model",
             )
             accuracy = test(net, device, config, phase="val", val_loader=val_loader)
             endTime_val = time.time()
             if best_metric < accuracy:
                 best_metric = accuracy
             writer.add_scalar('accuracy/val', accuracy, i) 
-            writer.add_scalar('time_epoch/training', ((endTime_val - startTime_val)*1000), i)
+            writer.add_scalar('time/validation', ((endTime_val - startTime_val)*1000), i)
             print(f"Validation accuracy: {accuracy}. Best accuracy: {best_metric}")
             net.train()
