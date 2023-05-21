@@ -116,7 +116,7 @@ def train(net, device, config, writer, train_dataloader, val_loader):
             endTime_val = time.time()
             if best_metric < accuracy:
                 best_metric = accuracy
-            writer.add_scalar('accuracy/val', accuracy, i) 
-            writer.add_scalar('time/validation', ((endTime_val - startTime_val)*1000), i)
+            writer.add_scalar('accuracy/val', accuracy, epoch_ct) 
+            writer.add_scalar('time/validation', ((endTime_val - startTime_val)*1000), epoch_ct)
             print(f"Validation accuracy: {accuracy}. Best accuracy: {best_metric}")
             net.train()
