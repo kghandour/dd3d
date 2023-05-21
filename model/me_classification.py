@@ -110,7 +110,7 @@ def train(net, device, config, writer, train_dataloader, val_loader):
                     "scheduler": scheduler.state_dict(),
                     "curr_iter": i,
                 },
-                config.get("weights")+"_"+str(epoch_ct)+".model",
+                config.get("exp_name")+config.get("binary_class_name")+"_overfit_"+str(config.getboolean("overfit_1"))+".model",
             )
             accuracy = test(net, device, config, phase="val", val_loader=val_loader)
             endTime_val = time.time()
