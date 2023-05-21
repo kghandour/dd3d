@@ -209,6 +209,6 @@ def criterion(pred, labels, smoothing=False):
         loss = -(one_hot * log_prb).sum(dim=1).mean()
     else:
         # loss = F.cross_entropy(pred, labels, reduction="mean")
-        loss = F.binary_cross_entropy(torch.sigmoid(pred).squeeze(), labels)
+        loss = F.binary_cross_entropy(torch.sigmoid(pred).squeeze(), labels.squeeze())
 
     return loss
