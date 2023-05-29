@@ -28,7 +28,7 @@ import torch.optim as optim
 import MinkowskiEngine as ME
 from torch.utils.tensorboard import SummaryWriter
 import torch
-from model.me_network import criterion
+from classification_model.me_network import criterion
 import sklearn.metrics as metrics
 import numpy as np
 

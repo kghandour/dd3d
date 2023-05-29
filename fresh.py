@@ -1,9 +1,9 @@
 from pytorch3d.datasets import ShapeNetCore
 import configparser
 import torch
-from model.augmentation import CoordinateTransformation, CoordinateTranslation
-from model.me_network import MinkowskiFCNN
-from model.me_classification import train, test
+from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
+from classification_model.me_network import MinkowskiFCNN
+from classification_model.me_classification import train, test
 from torch.utils.tensorboard import SummaryWriter
 import time
 import os
@@ -11,7 +11,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 import numpy as np
 
 
-from model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
+from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
 
 if __name__=="__main__":
     config = configparser.ConfigParser()

@@ -4,10 +4,10 @@ import os
 import glob
 import open3d as o3d
 import numpy as np
-from model.augmentation import CoordinateTransformation, CoordinateTranslation
+from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
 import MinkowskiEngine as ME
 from tqdm import tqdm
-from model.train_val_split import TRAIN_DICT, VAL_DICT
+from classification_model.train_val_split import TRAIN_DICT, VAL_DICT
 
 class_id = {'pillow': 0, 'bowl': 1, 'rocket': 2, 'keyboard': 3, 'sofa': 4, 'car': 5, 'laptop': 6, 'jar': 7, 'chair': 8, 'rifle': 9, 'watercraft': 10, 'telephone': 11, 'bottle': 12, 'cellphone': 13, 'airplane': 14, 'bookshelf': 15, 'lamp': 16, 'bus': 17, 'birdhouse': 18, 'faucet': 19, 'table': 20, 'stove': 21, 'cap': 22, 'can': 23, 'mailbox': 24, 'bag': 25, 'loudspeaker': 26, 'piano': 27, 'knife': 28, 'guitar': 29, 'bench': 30, 'train': 31, 'display': 32, 'dishwasher': 33, 'microwaves': 34, 'bathtub': 35, 'helmet': 36, 'file cabinet': 37, 'trash bin': 38, 'cabinet': 39, 'motorbike': 40, 'flowerpot': 41, 'basket': 42, 'tower': 43, 'camera': 44, 'pistol': 45, 'remote': 46, 'skateboard': 47, 'printer': 48, 'bed': 49, 'mug': 50, 'washer': 51, 'microphone': 52, 'clock': 53, 'earphone': 54}
 
@@ -98,12 +98,15 @@ class ShapeNetPCD(Dataset):
     
     def __getitem__(self, i):
         pcd = o3d.io.read_point_cloud(self.data[i])
-        downpcd = pcd.voxel_down_sample(voxel_size=0.025)
+        voxel_sz = 0.025
+        downpcd = pcd.voxel_down_sample(voxel_size=voxel_sz)
+        # while(np.asarray(downpcd.points).shape[0] > self.num_points):
+        #     voxel_sz += 0.05
+        #     downpcd = pcd.voxel_down_sample(voxel_size=voxel_sz)
+
         xyz = np.asarray(downpcd.points)
         if self.phase == "train":
             np.random.shuffle(xyz)
-        if len(xyz) > self.num_points:
-            xyz = xyz[: self.num_points]
         if self.transform is not None:
             xyz = self.transform(xyz)
         label = self.label[i]
@@ -119,7 +122,6 @@ class ShapeNetPCD(Dataset):
 
     def __repr__(self):
         return f"SHAPENET(phase={self.phase}, length={len(self)}, transform={self.transform})"
-
 
 # def make_data_loader(phase, config):
 #     assert phase in ["train", "val", "test"]
