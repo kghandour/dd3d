@@ -1,7 +1,7 @@
 import torch
 from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
-from utils.utils import get_loops, get_rand_cad
+from utils.utils import get_loops, get_rand_cad, get_cad_points, get_time
 import configparser
 import os
 import numpy as np
@@ -66,10 +66,17 @@ if __name__ == "__main__":
 
     print(cad_syn.shape)
     print('initialize synthetic data from random real pcd')
+
+    ### For REAL initialization
     for c in range(num_classes):
-        cad_syn.data[c*ipc:(c+1)*ipc] = get_rand_cad(c, ipc, indices_class, CAD_list).detach().data
+        path_to_rand_cad = get_rand_cad(c, ipc, indices_class, CAD_list)
+        cad_pts = get_cad_points(path_to_rand_cad, def_conf.getint("num_points"))
+        cad_syn.data[c*ipc:(c+1)*ipc] = cad_pts.detach().data
     ''' training '''
     optimizer_img = torch.optim.SGD([cad_syn, ], lr=def_conf.getfloat("lr_cad", 0.1), momentum=0.5) # optimizer_img for synthetic data
     optimizer_img.zero_grad()
     criterion = nn.CrossEntropyLoss().to(device)
+
+    print('%s training begins'%get_time())
+
     

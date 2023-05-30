@@ -106,7 +106,7 @@ class ShapeNetPCD(Dataset):
 
         xyz = np.asarray(downpcd.points)
         if self.phase == "train":
-            np.random.shuffle(xyz)
+            np.random.shuffle(xyz)[:self.num_points]
         if self.transform is not None:
             xyz = self.transform(xyz)
         label = self.label[i]
