@@ -6,7 +6,8 @@ import configparser
 import os
 import numpy as np
 import torch.nn as nn
-
+from classification_model.me_network import MinkowskiFCNN
+import copy
 
 if __name__ == "__main__":
     print("=======Distillation========")
@@ -18,6 +19,9 @@ if __name__ == "__main__":
     channel = def_conf.getint("channel", 1) ## Should it actually be a channel? 
     num_classes = def_conf.getint("num_classes", 2)
     outer_loop, inner_loop = get_loops(ipc) ## Variable defines the number of models per class
+    total_iterations = def_conf.getint("total_iterations")
+    eval_iteration_pool = np.arange(0, total_iterations+1, 500).tolist()
+
     if not os.path.exists(def_conf.get("save_path")):
         os.mkdir(def_conf.get("save_path"))
 
@@ -77,6 +81,19 @@ if __name__ == "__main__":
     optimizer_img.zero_grad()
     criterion = nn.CrossEntropyLoss().to(device)
 
-    print('%s training begins'%get_time())
+    model_eval_pool = ["MINKENGINE"]
 
-    
+    print('%s training begins'%get_time())
+    for it in range(total_iterations):
+        if it in eval_iteration_pool:
+            ## TODO: Integrate the MinkEng eval model here, and find other possible evaluation models
+            for model_eval in model_eval_pool:
+                net = MinkowskiFCNN(
+                    in_channel=3, out_channel=1, embedding_channel=1024, overfit_1=False
+                ).to(device)
+                cad_syn, label_syn = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
+                ## TODO: Import weights to the model, and eval and return accuracy
+                acc = 0.9 ## TODO: Replace this value
+
+            '''Save point cloud'''
+            ## TODO Save point cloud
