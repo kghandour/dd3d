@@ -15,7 +15,7 @@ from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
 
 if __name__=="__main__":
     config = configparser.ConfigParser()
-    config.read("config.ini")
+    config.read("configs/classification_config.ini")
     def_conf = config["DEFAULT"]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     overfit_1 = bool(def_conf.getboolean("overfit_1"))
