@@ -34,46 +34,61 @@ class ShapeNetPCD(Dataset):
             num_points = 2048,
         ) -> None:
         Dataset.__init__(self)
-        overfit_1 = bool(config.getboolean("overfit_1"))
+        classification_mode = config.get("classification_mode")
         cls_name = config.get("binary_class_name")
         self.phase = "val" if phase in ["val", "test"] else "train"
-        self.data, self.label = self.load_data(data_root, overfit_1, cls_name)
+        self.data, self.label = self.load_data(data_root, classification_mode, cls_name)
         self.transform = transform
         self.num_points = num_points
-        self.overfit_1 = overfit_1
+        self.classification_mode = classification_mode
 
-    def load_data(self, data_root, overfit_1, cls_name):
+    def load_data(self, data_root, classification_mode, cls_name):
         data, labels = [], []
         assert os.path.exists(data_root), f"{data_root} does not exist"
         target_class_dir = os.path.join(data_root,cls_name)
 
         if(self.phase == "train"):
-            for model in TRAIN_DICT[cls_name]:
-                labels.append(1)
-                data.append(model)
-            for key in TRAIN_DICT.keys():
-                if key != cls_name:
-                    for model in TRAIN_DICT[key][:80]:
-                        labels.append(0)
+            if(classification_mode == "multi"):
+                for key in TRAIN_DICT.keys():
+                    for model in TRAIN_DICT[key]:
+                        labels.append(class_id[key])
                         data.append(model)
+            else:
+                for model in TRAIN_DICT[cls_name]:
+                    labels.append(1)
+                    data.append(model)
+                for key in TRAIN_DICT.keys():
+                    if key != cls_name:
+                        for model in TRAIN_DICT[key][:80]:
+                            labels.append(0)
+                            data.append(model)
 
         if(self.phase =="val"):
-            for model in VAL_DICT[cls_name]:
-                labels.append(1)
-                data.append(model)
-            for key in VAL_DICT.keys():
-                if key != cls_name:
-                    for model in VAL_DICT[key][:20]:
-                        labels.append(0)
+            if(classification_mode == "multi"):
+                for key in VAL_DICT.keys():
+                    for model in VAL_DICT[key]:
+                        labels.append(class_id[key])
                         data.append(model)
+            else:
+                for model in VAL_DICT[cls_name]:
+                    labels.append(1)
+                    data.append(model)
+                for key in VAL_DICT.keys():
+                    if key != cls_name:
+                        for model in VAL_DICT[key][:20]:
+                            labels.append(0)
+                            data.append(model)
 
-        if(overfit_1):
+        if(classification_mode == "overfit_1"):
             data = data[:1]
             labels = labels[:1]
+        elif(classification_mode == "overfit_10"):
+            data = data[:10]
+            labels = labels[:10]
 
         labels = np.asarray(labels)
-
-        print("Other Classes: ", len(np.where(labels == 0)[0]),"Target Class", len(np.where(labels == 1)[0]))
+        
+        print("Class counts ", np.unique(labels, return_counts=True))
 
 
         # if(overfit_1):
@@ -93,8 +108,9 @@ class ShapeNetPCD(Dataset):
         #         labels.append(0)
         #         data.append(os.path.join(files,ply))
         # labels = np.asarray(labels)
-        # print("Other Classes: ", len(np.where(labels == 0)[0]),"Target Class", len(np.where(labels == 1)[0]))
-        return np.asarray(data),  torch.from_numpy(labels)
+        labels = torch.from_numpy(labels)
+        if(classification_mode == "multi"): labels.type(torch.LongTensor)
+        return np.asarray(data),  labels
     
     def __getitem__(self, i):
         pcd = o3d.io.read_point_cloud(self.data[i])
@@ -106,7 +122,8 @@ class ShapeNetPCD(Dataset):
 
         xyz = np.asarray(downpcd.points)
         if self.phase == "train":
-            np.random.shuffle(xyz)[:self.num_points]
+            np.random.shuffle(xyz)
+            xyz = xyz[:self.num_points]
         if self.transform is not None:
             xyz = self.transform(xyz)
         label = self.label[i]

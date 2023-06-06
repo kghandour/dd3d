@@ -43,7 +43,8 @@ def create_input_batch(batch, device="cuda", quantization_size=0.05):
 def test(net, device, config, val_loader, phase="val"):
 
     net.eval()
-    labels, preds = [], []
+    labels, preds, logits_list = [], [], []
+    classification_mode = config.get("classification_mode")
     with torch.no_grad():
         for batch in val_loader:
             input = create_input_batch(
@@ -52,11 +53,17 @@ def test(net, device, config, val_loader, phase="val"):
                 quantization_size=float(config.get("voxel_size")),
             )
             logit = net(input)
-            pred = torch.round(torch.sigmoid(logit))
+            logits_list.append(logit.cpu().numpy())
+            if(classification_mode=="multi"):
+                pred = torch.argmax(logit, 1)
+            else:
+                pred = torch.round(torch.sigmoid(logit))
             labels.append(batch["labels"].cpu().numpy())
             preds.append(pred.cpu().numpy())
             torch.cuda.empty_cache()
-    return metrics.accuracy_score(np.concatenate(labels), np.concatenate(preds))
+    val_loss = criterion(torch.from_numpy(np.concatenate(logits_list)), torch.from_numpy(np.concatenate(labels)), config.get("classification_mode"))
+    accuracy = metrics.accuracy_score(np.concatenate(labels), np.concatenate(preds))
+    return accuracy, val_loss
 
 def train(net, device, config, writer, train_dataloader, val_loader):
     optimizer = optim.SGD(
@@ -87,7 +94,7 @@ def train(net, device, config, writer, train_dataloader, val_loader):
             data_dict, device=device, quantization_size=float(config.get("voxel_size"))
         )
         logit = net(input)
-        loss = criterion(logit, data_dict["labels"].to(device))
+        loss = criterion(logit, data_dict["labels"].to(device), config.get("classification_mode"))
         loss.backward()
         optimizer.step()
         scheduler.step()
@@ -100,9 +107,12 @@ def train(net, device, config, writer, train_dataloader, val_loader):
             writer.add_scalar('time/training_iter', ((endTime - startTime)*1000), i)
 
         if i % len(train_dataloader) == 0 and i > 0:
+        # if i > 0:
             epoch_ct +=1
             writer.add_scalar('loss/training_epoch', loss.item(), epoch_ct) 
             startTime_val = time.time()
+            model_save_name = config.get("classification_mode")+"_"+config.get("exp_name")+"_"+config.get("binary_class_name")+".model"
+            if(config.get("classification_mode")=="multi"): model_save_name = config.get("classification_mode")+"_"+config.get("exp_name")+".model"
             torch.save(
                 {
                     "state_dict": net.state_dict(),
@@ -110,13 +120,14 @@ def train(net, device, config, writer, train_dataloader, val_loader):
                     "scheduler": scheduler.state_dict(),
                     "curr_iter": i,
                 },
-                config.get("exp_name")+config.get("binary_class_name")+"_overfit_"+str(config.getboolean("overfit_1"))+".model",
+                model_save_name,
             )
-            accuracy = test(net, device, config, phase="val", val_loader=val_loader)
+            accuracy, val_loss = test(net, device, config, phase="val", val_loader=val_loader)
             endTime_val = time.time()
             if best_metric < accuracy:
                 best_metric = accuracy
-            writer.add_scalar('accuracy/val', accuracy, epoch_ct) 
+            writer.add_scalar('accuracy/val', accuracy, epoch_ct)
+            writer.add_scalar('loss/validation', val_loss, epoch_ct)  
             writer.add_scalar('time/validation', ((endTime_val - startTime_val)*1000), epoch_ct)
-            print(f"Validation accuracy: {accuracy}. Best accuracy: {best_metric}")
+            print(f"Validation accuracy: {accuracy}. Best accuracy: {best_metric}, Validation Loss: {val_loss}")
             net.train()

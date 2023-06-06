@@ -18,28 +18,33 @@ if __name__=="__main__":
     config.read("configs/classification_config.ini")
     def_conf = config["DEFAULT"]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    overfit_1 = bool(def_conf.getboolean("overfit_1"))
+    classification_mode = def_conf.get("classification_mode")
     target_class = def_conf.get("binary_class_name")
-    exp_name = def_conf.get("exp_name") +target_class+"_"+str(time.time())
+    exp_name = classification_mode+"_"+def_conf.get("exp_name")+"_"+target_class+"_"+str(time.time())
+    if(classification_mode=="multi"): exp_name = classification_mode+"_"+def_conf.get("exp_name")+"_"+str(time.time())
 
-    print("Overfitting Experiment? ", overfit_1)
+    print("Classification mode: ", classification_mode)
 
     print("=============ShapeNet PCD Dataset===============")
     print(f"Training with translation", def_conf.get("train_translation"))
     print(f"Evaluating with translation", def_conf.get("train_translation"))
     print("=============================================\n\n")
 
-    net = MinkowskiFCNN(
-        in_channel=3, out_channel=1, embedding_channel=1024, overfit_1=overfit_1
-    ).to(device)
+
+    if(classification_mode=="multi"):
+        net = MinkowskiFCNN(
+            in_channel=3, out_channel=55, embedding_channel=1024, classification_mode = classification_mode
+        ).to(device)
+    else:
+        net = MinkowskiFCNN(
+            in_channel=3, out_channel=1, embedding_channel=1024, classification_mode = classification_mode
+        ).to(device)
+
 
     print("===================Network===================")
     print(net)
     print("=============================================\n\n")
-    print("==================Init Logger===============\n\n")
-
-    writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),exp_name)) #initialize sumamry writer
-    print("Initialized to ", os.path.join(def_conf.get("log_dir"),exp_name))
+    
     # dataset = ShapeNetPCD(
     #     transform=CoordinateTransformation(trans=float(def_conf.get("train_translation"))),
     #     data_root=def_conf.get("shapenet_path"),
@@ -57,7 +62,7 @@ if __name__=="__main__":
     # train_sampler = SubsetRandomSampler(train_indices)
     # valid_sampler = SubsetRandomSampler(val_indices)
     batch_size = int(def_conf.get("batch_size"))
-    if(overfit_1): batch_size = 1
+    if(classification_mode == "overfit_1"): batch_size = 1
 
     train_set = ShapeNetPCD(
         transform=CoordinateTransformation(trans=float(def_conf.get("train_translation"))),
@@ -80,6 +85,11 @@ if __name__=="__main__":
     validation_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size,
         collate_fn=minkowski_collate_fn,
     )
+
+    print("==================Init Logger===============\n\n")
+
+    writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),exp_name)) #initialize sumamry writer
+    print("Initialized to ", os.path.join(def_conf.get("log_dir"),exp_name))
 
     train(net, device, def_conf, writer, train_dataloader=train_loader, val_loader=validation_loader)
 
