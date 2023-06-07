@@ -66,6 +66,11 @@ def test(net, device, config, val_loader, phase="val"):
     return accuracy, val_loss
 
 def train(net, device, config, writer, train_dataloader, val_loader):
+    load_model_path = config.get("load_model")
+    load_model = False
+    if(load_model_path is not None):
+        load_model = True
+    
     optimizer = optim.SGD(
         net.parameters(),
         lr=float(config.get("lr")),
@@ -76,6 +81,10 @@ def train(net, device, config, writer, train_dataloader, val_loader):
         optimizer,
         T_max=int(config.get("max_steps")),
     )
+    if(load_model):
+        loaded_dict = torch.load(load_model_path)
+        optimizer.load_state_dict(loaded_dict['optimizer'])
+        scheduler.load_state_dict(loaded_dict['scheduler'])
     epoch_ct = 0
     print(optimizer)
     print(scheduler)
@@ -84,6 +93,7 @@ def train(net, device, config, writer, train_dataloader, val_loader):
     net.train()
     for i in range(int(config.get("max_steps"))):
         optimizer.zero_grad()
+        if(load_model): i = loaded_dict['curr_iter']
         startTime = time.time()
         try:
             data_dict = next(train_iter)
