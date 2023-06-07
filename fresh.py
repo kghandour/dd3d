@@ -69,11 +69,13 @@ if __name__=="__main__":
         data_root=def_conf.get("shapenet_path"),
         config=def_conf,
         phase="train"
+
     )
     train_loader = torch.utils.data.DataLoader(train_set, 
         batch_size=batch_size,
         collate_fn=minkowski_collate_fn,
         shuffle=True,
+        drop_last = True
     )
 
     val_set = ShapeNetPCD(
@@ -84,6 +86,7 @@ if __name__=="__main__":
     )
     validation_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size,
         collate_fn=minkowski_collate_fn,
+        drop_last = True
     )
 
     print("==================Init Logger===============\n\n")

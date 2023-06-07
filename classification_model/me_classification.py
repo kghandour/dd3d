@@ -110,6 +110,7 @@ def train(net, device, config, writer, train_dataloader, val_loader):
         # if i > 0:
             epoch_ct +=1
             writer.add_scalar('loss/training_epoch', loss.item(), epoch_ct) 
+            print(f"Epoch number: {epoch_ct} Training Loss: {loss.item()}")
             startTime_val = time.time()
             model_save_name = config.get("classification_mode")+"_"+config.get("exp_name")+"_"+config.get("binary_class_name")+".model"
             if(config.get("classification_mode")=="multi"): model_save_name = config.get("classification_mode")+"_"+config.get("exp_name")+".model"
