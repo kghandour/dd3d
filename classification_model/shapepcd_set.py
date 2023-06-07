@@ -4,10 +4,10 @@ import os
 import glob
 import open3d as o3d
 import numpy as np
-from model.augmentation import CoordinateTransformation, CoordinateTranslation
+from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
 import MinkowskiEngine as ME
 from tqdm import tqdm
-from model.train_val_split import TRAIN_DICT, VAL_DICT
+from classification_model.train_val_split import TRAIN_DICT, VAL_DICT
 
 class_id = {'pillow': 0, 'bowl': 1, 'rocket': 2, 'keyboard': 3, 'sofa': 4, 'car': 5, 'laptop': 6, 'jar': 7, 'chair': 8, 'rifle': 9, 'watercraft': 10, 'telephone': 11, 'bottle': 12, 'cellphone': 13, 'airplane': 14, 'bookshelf': 15, 'lamp': 16, 'bus': 17, 'birdhouse': 18, 'faucet': 19, 'table': 20, 'stove': 21, 'cap': 22, 'can': 23, 'mailbox': 24, 'bag': 25, 'loudspeaker': 26, 'piano': 27, 'knife': 28, 'guitar': 29, 'bench': 30, 'train': 31, 'display': 32, 'dishwasher': 33, 'microwaves': 34, 'bathtub': 35, 'helmet': 36, 'file cabinet': 37, 'trash bin': 38, 'cabinet': 39, 'motorbike': 40, 'flowerpot': 41, 'basket': 42, 'tower': 43, 'camera': 44, 'pistol': 45, 'remote': 46, 'skateboard': 47, 'printer': 48, 'bed': 49, 'mug': 50, 'washer': 51, 'microphone': 52, 'clock': 53, 'earphone': 54}
 
@@ -34,46 +34,61 @@ class ShapeNetPCD(Dataset):
             num_points = 2048,
         ) -> None:
         Dataset.__init__(self)
-        overfit_1 = bool(config.getboolean("overfit_1"))
+        classification_mode = config.get("classification_mode")
         cls_name = config.get("binary_class_name")
         self.phase = "val" if phase in ["val", "test"] else "train"
-        self.data, self.label = self.load_data(data_root, overfit_1, cls_name)
+        self.data, self.label = self.load_data(data_root, classification_mode, cls_name)
         self.transform = transform
         self.num_points = num_points
-        self.overfit_1 = overfit_1
+        self.classification_mode = classification_mode
 
-    def load_data(self, data_root, overfit_1, cls_name):
+    def load_data(self, data_root, classification_mode, cls_name):
         data, labels = [], []
         assert os.path.exists(data_root), f"{data_root} does not exist"
         target_class_dir = os.path.join(data_root,cls_name)
 
         if(self.phase == "train"):
-            for model in TRAIN_DICT[cls_name]:
-                labels.append(1)
-                data.append(model)
-            for key in TRAIN_DICT.keys():
-                if key != cls_name:
-                    for model in TRAIN_DICT[key][:80]:
-                        labels.append(0)
+            if(classification_mode == "multi"):
+                for key in TRAIN_DICT.keys():
+                    for model in TRAIN_DICT[key]:
+                        labels.append(class_id[key])
                         data.append(model)
+            else:
+                for model in TRAIN_DICT[cls_name]:
+                    labels.append(1)
+                    data.append(model)
+                for key in TRAIN_DICT.keys():
+                    if key != cls_name:
+                        for model in TRAIN_DICT[key][:80]:
+                            labels.append(0)
+                            data.append(model)
 
         if(self.phase =="val"):
-            for model in VAL_DICT[cls_name]:
-                labels.append(1)
-                data.append(model)
-            for key in VAL_DICT.keys():
-                if key != cls_name:
-                    for model in VAL_DICT[key][:20]:
-                        labels.append(0)
+            if(classification_mode == "multi"):
+                for key in VAL_DICT.keys():
+                    for model in VAL_DICT[key]:
+                        labels.append(class_id[key])
                         data.append(model)
+            else:
+                for model in VAL_DICT[cls_name]:
+                    labels.append(1)
+                    data.append(model)
+                for key in VAL_DICT.keys():
+                    if key != cls_name:
+                        for model in VAL_DICT[key][:20]:
+                            labels.append(0)
+                            data.append(model)
 
-        if(overfit_1):
+        if(classification_mode == "overfit_1"):
             data = data[:1]
             labels = labels[:1]
+        elif(classification_mode == "overfit_10"):
+            data = data[:10]
+            labels = labels[:10]
 
         labels = np.asarray(labels)
-
-        print("Other Classes: ", len(np.where(labels == 0)[0]),"Target Class", len(np.where(labels == 1)[0]))
+        
+        print("Class counts ", np.unique(labels, return_counts=True))
 
 
         # if(overfit_1):
@@ -93,17 +108,22 @@ class ShapeNetPCD(Dataset):
         #         labels.append(0)
         #         data.append(os.path.join(files,ply))
         # labels = np.asarray(labels)
-        # print("Other Classes: ", len(np.where(labels == 0)[0]),"Target Class", len(np.where(labels == 1)[0]))
-        return np.asarray(data),  torch.from_numpy(labels)
+        labels = torch.from_numpy(labels)
+        if(classification_mode == "multi"): labels.type(torch.LongTensor)
+        return np.asarray(data),  labels
     
     def __getitem__(self, i):
         pcd = o3d.io.read_point_cloud(self.data[i])
-        downpcd = pcd.voxel_down_sample(voxel_size=0.025)
+        voxel_sz = 0.025
+        downpcd = pcd.voxel_down_sample(voxel_size=voxel_sz)
+        # while(np.asarray(downpcd.points).shape[0] > self.num_points):
+        #     voxel_sz += 0.05
+        #     downpcd = pcd.voxel_down_sample(voxel_size=voxel_sz)
+
         xyz = np.asarray(downpcd.points)
         if self.phase == "train":
             np.random.shuffle(xyz)
-        if len(xyz) > self.num_points:
-            xyz = xyz[: self.num_points]
+            xyz = xyz[:self.num_points]
         if self.transform is not None:
             xyz = self.transform(xyz)
         label = self.label[i]
@@ -119,7 +139,6 @@ class ShapeNetPCD(Dataset):
 
     def __repr__(self):
         return f"SHAPENET(phase={self.phase}, length={len(self)}, transform={self.transform})"
-
 
 # def make_data_loader(phase, config):
 #     assert phase in ["train", "val", "test"]

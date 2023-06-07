@@ -15,10 +15,11 @@ class MinkowskiFCNN(ME.MinkowskiNetwork):
         embedding_channel=1024,
         channels=(32, 48, 64, 96, 128),
         D=3,
-        overfit_1 = False
+        classification_mode = "overfit_1"
     ):
         ME.MinkowskiNetwork.__init__(self, D)
-
+        overfit_1 = False
+        if(classification_mode == "overfit_1"): overfit_1 = True
         self.network_initialization(
             in_channel,
             out_channel,
@@ -195,10 +196,11 @@ class GlobalMaxAvgPool(torch.nn.Module):
         y = self.global_avg_pool(tensor)
         return ME.cat(x, y)
     
-def criterion(pred, labels, smoothing=False):
+def criterion(pred, labels, classification_mode = "multi", smoothing=False):
     """Calculate cross entropy loss, apply label smoothing if needed."""
-
-    labels = labels.contiguous().view(-1).to(torch.float32)
+    labels = labels.contiguous().view(-1)
+    if(classification_mode != "multi"):
+        labels = labels.to(torch.float32)
     if smoothing:
         eps = 0.2
         n_class = pred.size(1)
@@ -208,7 +210,9 @@ def criterion(pred, labels, smoothing=False):
 
         loss = -(one_hot * log_prb).sum(dim=1).mean()
     else:
-        # loss = F.cross_entropy(pred, labels, reduction="mean")
-        loss = F.binary_cross_entropy(torch.sigmoid(pred).squeeze(), labels.squeeze())
+        if(classification_mode == "multi"):
+            loss = F.cross_entropy(pred, labels, reduction="mean")
+        else:
+            loss = F.binary_cross_entropy(torch.sigmoid(pred).squeeze(), labels.squeeze())
 
     return loss
