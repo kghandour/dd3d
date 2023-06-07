@@ -31,6 +31,9 @@ import torch
 from classification_model.me_network import criterion
 import sklearn.metrics as metrics
 import numpy as np
+from classification_model.shapepcd_single import get_class_name_from_id
+
+
 
 def create_input_batch(batch, device="cuda", quantization_size=0.05):
     batch["coordinates"][:, 1:] = batch["coordinates"][:, 1:] / quantization_size
@@ -63,6 +66,8 @@ def test(net, device, config, val_loader, phase="val"):
             torch.cuda.empty_cache()
     val_loss = criterion(torch.from_numpy(np.concatenate(logits_list)), torch.from_numpy(np.concatenate(labels)), config.get("classification_mode"))
     accuracy = metrics.accuracy_score(np.concatenate(labels), np.concatenate(preds))
+    if(len(val_loader.dataset)==1): 
+        print(f"Item classified as: {get_class_name_from_id(preds[0][0])}, True label is {get_class_name_from_id(labels[0][0])}")
     return accuracy, val_loss
 
 def train(net, device, config, writer, train_dataloader, val_loader):
@@ -91,6 +96,7 @@ def train(net, device, config, writer, train_dataloader, val_loader):
     train_iter = iter(train_dataloader)
     best_metric = 0
     net.train()
+    epoch_losses = []
     for i in range(int(config.get("max_steps"))):
         optimizer.zero_grad()
         if(load_model): i = loaded_dict['curr_iter']
@@ -105,6 +111,7 @@ def train(net, device, config, writer, train_dataloader, val_loader):
         )
         logit = net(input)
         loss = criterion(logit, data_dict["labels"].to(device), config.get("classification_mode"))
+        epoch_losses.append(loss.item())
         loss.backward()
         optimizer.step()
         scheduler.step()
@@ -112,14 +119,15 @@ def train(net, device, config, writer, train_dataloader, val_loader):
         endTime = time.time()
 
         if i % int(config.get("stat_freq")) == 0 and i > 0:
+            ### Iteration ####
             print(f"Iteration: {i}, Loss: {loss.item():.3e}")
             writer.add_scalar('loss/training_iter', loss.item(), i) 
             writer.add_scalar('time/training_iter', ((endTime - startTime)*1000), i)
 
         if i % len(train_dataloader) == 0 and i > 0:
-        # if i > 0:
+            ### Epoch ####
             epoch_ct +=1
-            writer.add_scalar('loss/training_epoch', loss.item(), epoch_ct) 
+            writer.add_scalar('loss/training_epoch', sum(epoch_losses)/len(epoch_losses), epoch_ct) 
             print(f"Epoch number: {epoch_ct} Training Loss: {loss.item()}")
             startTime_val = time.time()
             model_save_name = config.get("classification_mode")+"_"+config.get("exp_name")+"_"+config.get("binary_class_name")+".model"
