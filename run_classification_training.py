@@ -1,4 +1,3 @@
-from pytorch3d.datasets import ShapeNetCore
 import configparser
 import torch
 from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
@@ -7,21 +6,24 @@ from classification_model.me_classification import train, test
 from torch.utils.tensorboard import SummaryWriter
 import time
 import os
-from torch.utils.data.sampler import SubsetRandomSampler
-import numpy as np
 
 
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
 
 if __name__=="__main__":
     config = configparser.ConfigParser()
-    config.read("configs/classification_config.ini")
+    config.read("configs/classification_load.ini")
     def_conf = config["DEFAULT"]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     classification_mode = def_conf.get("classification_mode")
     target_class = def_conf.get("binary_class_name")
     exp_name = classification_mode+"_"+def_conf.get("exp_name")+"_"+target_class+"_"+str(time.time())
     if(classification_mode=="multi"): exp_name = classification_mode+"_"+def_conf.get("exp_name")+"_"+str(time.time())
+    load_model_path = def_conf.get("load_model")
+    load_model = False
+    if(load_model_path is not None):
+        load_model = True
+        print("========LOADING SAVED WEIGHTS========")
 
     print("Classification mode: ", classification_mode)
 
@@ -64,6 +66,11 @@ if __name__=="__main__":
     batch_size = int(def_conf.get("batch_size"))
     if(classification_mode == "overfit_1"): batch_size = 1
 
+    if(load_model):
+        loaded_dict = torch.load(load_model_path)
+        net.load_state_dict(loaded_dict['state_dict'])
+        net.eval()
+
     train_set = ShapeNetPCD(
         transform=CoordinateTransformation(trans=float(def_conf.get("train_translation"))),
         data_root=def_conf.get("shapenet_path"),
@@ -95,8 +102,10 @@ if __name__=="__main__":
     print("Initialized to ", os.path.join(def_conf.get("log_dir"),exp_name))
 
     train(net, device, def_conf, writer, train_dataloader=train_loader, val_loader=validation_loader)
-
-    accuracy = test(net, device, def_conf, phase="test")
+    print("====== TRAINING COMPLETE =======")
+    print("====== TESTING MODE ==========")
+    accuracy = test(net, device, def_conf, phase="test", val_loader=validation_loader)
+    print()
     print(f"Test accuracy: {accuracy}")
     
 
