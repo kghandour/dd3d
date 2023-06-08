@@ -127,7 +127,8 @@ def train(net, device, config, writer, train_dataloader, val_loader):
         if i % len(train_dataloader) == 0 and i > 0:
             ### Epoch ####
             epoch_ct +=1
-            writer.add_scalar('loss/training_epoch', sum(epoch_losses)/len(epoch_losses), epoch_ct) 
+            writer.add_scalar('loss/training_epoch', sum(epoch_losses)/len(epoch_losses), epoch_ct)
+            epoch_losses = [] 
             print(f"Epoch number: {epoch_ct} Training Loss: {loss.item()}")
             startTime_val = time.time()
             model_save_name = config.get("classification_mode")+"_"+config.get("exp_name")+"_"+config.get("binary_class_name")+".model"
