@@ -42,10 +42,11 @@ class ShapeNetPCD(Dataset):
         self.num_points = num_points
         self.classification_mode = classification_mode
 
-    def load_data(self, data_root, classification_mode, cls_name):
+    def load_data(self, data_root, classification_mode, cls_name=None):
         data, labels = [], []
         assert os.path.exists(data_root), f"{data_root} does not exist"
-        target_class_dir = os.path.join(data_root,cls_name)
+        if(cls_name is not None):
+            target_class_dir = os.path.join(data_root,cls_name)
 
         if(self.phase == "train"):
             if(classification_mode == "multi"):

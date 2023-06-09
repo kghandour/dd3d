@@ -16,11 +16,12 @@ if __name__ == "__main__":
     config.read("configs/distillation_config.ini")
     def_conf = config["DEFAULT"]
     ipc = def_conf.getint("n_cad_per_class", 1) ## Number of CAD models per class
-    channel = def_conf.getint("channel", 1) ## Should it actually be a channel? 
+    channel = def_conf.getint("channel", 3) ## Should it actually be a channel? 
     num_classes = def_conf.getint("num_classes", 2)
     outer_loop, inner_loop = get_loops(ipc) ## Variable defines the number of models per class
     total_iterations = def_conf.getint("total_iterations")
     eval_iteration_pool = np.arange(0, total_iterations+1, 500).tolist()
+    num_points = def_conf.getint("num_points", 2048) ## Number of points
 
     if not os.path.exists(def_conf.get("save_path")):
         os.mkdir(def_conf.get("save_path"))
@@ -28,49 +29,38 @@ if __name__ == "__main__":
     batch_size = def_conf.getint("batch_size")
     if(def_conf.getboolean("overfit_1")): batch_size = 1
 
-    grid_size = [40, 40, 40]
     
-    train_set = ShapeNetPCD(
-        data_root=def_conf.get("shapenet_path"),
-        config=def_conf,
-        phase="train"
-    )
-    train_loader = torch.utils.data.DataLoader(train_set, 
-        batch_size=batch_size,
-        collate_fn=minkowski_collate_fn,
-        shuffle=True,
-        num_workers=def_conf.getint("num_workers", 2)
-    )
+    ''' organize the real dataset '''
+    cad_all_path = []
+    labels_all = []
+    indices_class = [[] for c in range(num_classes)]
 
-    val_set = ShapeNetPCD(
-        data_root=def_conf.get("shapenet_path"),
-        config=def_conf,
-        phase="val"
-    )
-    validation_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size,
-        collate_fn=minkowski_collate_fn,
-    )
+    '''This loads the list of paths and labels of the trainset. 
+    Does not make a val set because it is not needed atm.
+    DS Stores the entire images in memory. Not the most efficient in terms of memory but faster'''
+    cad_all_path, labels_all = ShapeNetPCD(phase="train", data_root=def_conf.get("shapenet_path"), config=def_conf).load_data(data_root=def_conf.get("shapenet_path"), classification_mode=def_conf.get("classification_mode"))
 
-    CAD_list, label_list = ShapeNetPCD(
-        data_root=def_conf.get("shapenet_path"),
-        config=def_conf,
-        phase="train"
-    ).load_data(data_root=def_conf.get("shapenet_path"), overfit_1=False, cls_name="airplane")
-   
-
-    indices_class = [[] for c in range(2)]
-    for i, lab in enumerate(label_list):
+    indices_class = [[] for c in range(55)]
+    for i, lab in enumerate(labels_all):
         indices_class[lab].append(i)
+
+    for c in range(num_classes):
+        print('class c = %d: %d real images'%(c, len(indices_class[c])))
 
     ## REAL initialization. 
 
-    cad_syn = torch.randn(size=(num_classes*ipc, channel, grid_size[0], grid_size[1], grid_size[2]), requires_grad=True, device=device) ## This is a normal distribution from with mean 0, variance 1. 
-    ## I can also divide by 2 and add 1 so it is from 0 to 1
-    label_syn = torch.tensor([np.ones(ipc)*i for i in range(num_classes)], dtype=torch.long, requires_grad=False, device=device).view(-1)
+    # RANDN results in a normal distribution. Values not limited from -1, 1.
+    # cad_syn = torch.randn(size=(num_classes*ipc, num_points, channel), requires_grad=True, device=device) ## This is a normal distribution from with mean 0, variance 1. 
+    # RAND might be a better choice (should be from 0 to 1 now)
+    cad_syn = torch.rand(size=(num_classes*ipc, num_points, channel), requires_grad=True, device=device)
+    ## Set it from -1 to 1
+    cad_syn = (-1-1)*cad_syn + 1
 
-    print(cad_syn.shape)
-    print('initialize synthetic data from random real pcd')
+    label_syn = torch.tensor(np.array([np.ones(ipc, dtype=int)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=device).view(-1)
 
+    print(f"======= Initialized Synthetic dataset with {ipc} CAD per class. CAD array shape is {cad_syn.shape} with values normalized between {cad_syn.min(), cad_syn.max()}===============")
+
+    exit()
     ### For REAL initialization
     for c in range(num_classes):
         path_to_rand_cad = get_rand_cad(c, ipc, indices_class, CAD_list)
