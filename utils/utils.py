@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import time
 import open3d as o3d
+from torch.utils.data import Dataset
 
 
 def get_loops(ipc):
@@ -40,3 +41,24 @@ def get_cad_points(path, num_points):
     np.random.shuffle(xyz)
     xyz = xyz[:num_points]
     return xyz.to(torch.float32)
+
+class TensorDataset(Dataset):
+    def __init__(self, cad, labels): 
+        self.cad = cad.detach()
+        self.labels = labels.detach()
+
+    def __getitem__(self, index):
+        pcd = o3d.io.read_point_cloud(self.cad[index])
+        voxel_sz = 0.025
+        downpcd = pcd.voxel_down_sample(voxel_size=voxel_sz)
+        xyz = np.asarray(downpcd.points)
+        label = self.labels[index]
+        xyz = torch.from_numpy(xyz)
+        return {
+            "coordinates": xyz.to(torch.float32),
+            "features": xyz.to(torch.float32),
+            "label": label,
+        }
+
+    def __len__(self):
+        return self.cad.shape[0]

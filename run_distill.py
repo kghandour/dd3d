@@ -22,7 +22,8 @@ if __name__ == "__main__":
     total_iterations = def_conf.getint("total_iterations")
     eval_iteration_pool = np.arange(0, total_iterations+1, 500).tolist()
     num_points = def_conf.getint("num_points", 2048) ## Number of points
-
+    load_model_path = def_conf.get("load_model")
+    loaded_dict = torch.load(load_model_path)
     if not os.path.exists(def_conf.get("save_path")):
         os.mkdir(def_conf.get("save_path"))
 
@@ -75,7 +76,6 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss().to(device)
 
     model_eval_pool = ["MINKENGINE"]
-    exit()
 
     print('%s training begins'%get_time())
     for it in range(total_iterations):
@@ -83,10 +83,12 @@ if __name__ == "__main__":
             ## TODO: Integrate the MinkEng eval model here, and find other possible evaluation models
             for model_eval in model_eval_pool:
                 net = MinkowskiFCNN(
-                    in_channel=3, out_channel=1, embedding_channel=1024, overfit_1=False
+                    in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("classification_mode")
                 ).to(device)
-                cad_syn, label_syn = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
+                cad_syn_eval, label_syn_eval = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
                 ## TODO: Import weights to the model, and eval and return accuracy
+                net.load_state_dict(loaded_dict['state_dict'])
+                net.eval()
                 acc = 0.9 ## TODO: Replace this value
 
             '''Save point cloud'''
