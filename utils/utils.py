@@ -36,10 +36,7 @@ def get_cad_points(path, num_points):
     pcd = o3d.io.read_point_cloud(path)
     voxel_sz = 0.025
     downpcd = pcd.voxel_down_sample(voxel_size=voxel_sz)
-    # while(np.asarray(downpcd.points).shape[0] > self.num_points):
-    #     voxel_sz += 0.05
-    #     downpcd = pcd.voxel_down_sample(voxel_size=voxel_sz)
-
     xyz = np.asarray(downpcd.points)
-    np.random.shuffle(xyz)[:num_points]
+    np.random.shuffle(xyz)
+    xyz = xyz[:num_points]
     return xyz.to(torch.float32)

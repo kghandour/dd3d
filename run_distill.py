@@ -52,26 +52,30 @@ if __name__ == "__main__":
     # RANDN results in a normal distribution. Values not limited from -1, 1.
     # cad_syn = torch.randn(size=(num_classes*ipc, num_points, channel), requires_grad=True, device=device) ## This is a normal distribution from with mean 0, variance 1. 
     # RAND might be a better choice (should be from 0 to 1 now)
-    cad_syn = torch.rand(size=(num_classes*ipc, num_points, channel), requires_grad=True, device=device)
+    cad_syn = torch.rand(size=(num_classes*ipc, num_points, channel), device=device)
     ## Set it from -1 to 1
-    cad_syn = (-1-1)*cad_syn + 1
+    cad_syn = ((-1-1)*cad_syn + 1).requires_grad_()
 
     label_syn = torch.tensor(np.array([np.ones(ipc, dtype=int)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=device).view(-1)
 
-    print(f"======= Initialized Synthetic dataset with {ipc} CAD per class. CAD array shape is {cad_syn.shape} with values normalized between {cad_syn.min(), cad_syn.max()}===============")
 
-    exit()
     ### For REAL initialization
-    for c in range(num_classes):
-        path_to_rand_cad = get_rand_cad(c, ipc, indices_class, CAD_list)
-        cad_pts = get_cad_points(path_to_rand_cad, def_conf.getint("num_points"))
-        cad_syn.data[c*ipc:(c+1)*ipc] = cad_pts.detach().data
+    if(def_conf.get("initialization")=="real"):
+        print("======= Initializing synthetic dataset from real data ==========")
+        for c in range(num_classes):
+            path_to_rand_cad = get_rand_cad(c, ipc, indices_class, cad_all_path)
+            cad_pts = get_cad_points(path_to_rand_cad, def_conf.getint("num_points"))
+            cad_syn.data[c*ipc:(c+1)*ipc] = cad_pts.detach().data
+    else:
+        print(f"======= Initialized Synthetic dataset with {ipc} CAD per class. CAD array shape is {cad_syn.shape} with values normalized between {cad_syn.min(), cad_syn.max()}===============")
+
     ''' training '''
     optimizer_img = torch.optim.SGD([cad_syn, ], lr=def_conf.getfloat("lr_cad", 0.1), momentum=0.5) # optimizer_img for synthetic data
     optimizer_img.zero_grad()
     criterion = nn.CrossEntropyLoss().to(device)
 
     model_eval_pool = ["MINKENGINE"]
+    exit()
 
     print('%s training begins'%get_time())
     for it in range(total_iterations):
