@@ -1,13 +1,15 @@
 import torch
 from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
-from utils.utils import get_loops, get_rand_cad, get_cad_points, get_time
+from utils.utils import TensorDataset, get_loops, get_rand_cad, get_cad_points, get_time
 import configparser
 import os
 import numpy as np
 import torch.nn as nn
 from classification_model.me_network import MinkowskiFCNN
 import copy
+from torch import optim
+
 
 if __name__ == "__main__":
     print("=======Distillation========")
@@ -40,6 +42,7 @@ if __name__ == "__main__":
     Does not make a val set because it is not needed atm.
     DS Stores the entire images in memory. Not the most efficient in terms of memory but faster'''
     cad_all_path, labels_all = ShapeNetPCD(phase="train", data_root=def_conf.get("shapenet_path"), config=def_conf).load_data(data_root=def_conf.get("shapenet_path"), classification_mode=def_conf.get("classification_mode"))
+    val_loader = ShapeNetPCD(phase="val", data_root=def_conf.get("shapenet_path"), config=def_conf)
 
     indices_class = [[] for c in range(55)]
     for i, lab in enumerate(labels_all):
@@ -89,7 +92,27 @@ if __name__ == "__main__":
                 ## TODO: Import weights to the model, and eval and return accuracy
                 net.load_state_dict(loaded_dict['state_dict'])
                 net.eval()
+                syn_ds = TensorDataset(cad_syn_eval, label_syn_eval)
+                for it_eval in range(def_conf.getint("num_eval")):
+                    acc_train, acc_test = evaluate_synset(it_eval, net, syn_ds, val_loader, def_conf, loaded_dict)
                 acc = 0.9 ## TODO: Replace this value
 
             '''Save point cloud'''
             ## TODO Save point cloud
+
+def evaluate_synset(iteration, model, syn_ds, val_loader, config, checkpoint_load):
+    loss_avg, acc_avg, num_exp = 0, 0, 0
+    optimizer_model = optim.SGD(
+        net.parameters(),
+        lr=def_conf.getfloat("lr"),
+        momentum=0.9,
+        weight_decay=def_conf.getfloat("weight_decay"),
+    )
+    scheduler_model = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer_model,
+        T_max=def_conf.getint("max_steps"),
+    )
+    optimizer_model.load_state_dict(checkpoint_load['optimizer'])
+    scheduler_model.load_state_dict(checkpoint_load['scheduler'])
+    ## TODO continue epoch passing through the synthetic, and through the original
+    
