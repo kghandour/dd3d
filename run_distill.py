@@ -1,3 +1,4 @@
+from sklearn import metrics
 import torch
 from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
@@ -6,10 +7,81 @@ import configparser
 import os
 import numpy as np
 import torch.nn as nn
-from classification_model.me_network import MinkowskiFCNN
+from classification_model.me_network import MinkowskiFCNN, criterion
+from classification_model.me_classification import create_input_batch, test
 import copy
 from torch import optim
+from torch.utils.tensorboard import SummaryWriter
+import time
 
+
+def evaluate_synset(it, iteration, net, syn_ds, val_loader, config, checkpoint_load, device, summary_writer):
+    optimizer_model = optim.SGD(
+        net.parameters(),
+        lr=config.getfloat("lr_classification"),
+        momentum=0.9,
+        weight_decay=config.getfloat("weight_decay_classification"),
+    )
+    scheduler_model = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer_model,
+        T_max=config.getint("max_steps"),
+    )
+    optimizer_model.load_state_dict(checkpoint_load['optimizer'])
+    scheduler_model.load_state_dict(checkpoint_load['scheduler'])
+    ## TODO continue epoch passing through the synthetic, and through the original
+    time_start = time.time()
+
+    epoch_eval_train = config.getint("epoch_eval_train")
+    for ep in range(epoch_eval_train+1):
+        loss_train, acc_train = train_classifier(net, device, config, syn_ds, "train", optimizer_model, scheduler_model)
+        summary_writer.add_scalar("classiifcation/loss_train", loss_train, it*100000+iteration*1000+ep)
+        summary_writer.add_scalar("classiifcation/acc_train", acc_train, it*100000+iteration*1000+ep)
+        print('Evaluating iteration/epoch: %d training loss: %f training accuracy: %f' % (it*100000+iteration*1000+ep, loss_train, acc_train))
+
+    time_train = time.time() - time_start
+    summary_writer.add_scalar("classiifcation/time_train", time_train, it*100000+iteration*1000+ep)
+    loss_val, acc_val = train_classifier(net, device, config, val_loader, "val", optimizer_model, scheduler_model)
+    summary_writer.add_scalar("classiifcation/loss_val", loss_val, it*100000+iteration*1000+ep)
+    summary_writer.add_scalar("classiifcation/acc_val", acc_val, it*100000+iteration*1000+ep)
+    print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, epoch_eval_train, int(time_train), loss_train, acc_train, acc_val))
+    return acc_train, acc_val
+
+
+
+
+def train_classifier(net, device, config, loader, phase, optimizer, scheduler):
+    if(phase=="train"):
+        net.train()
+    else:
+        net.eval()
+    
+    loss_avg, acc_avg, num_exp = 0, 0, 0
+
+    for train_iter in loader:
+        input = create_input_batch(
+            train_iter, device=device, quantization_size=config.getfloat("voxel_size")
+        )
+        logit = net(input)
+        loss = criterion(logit, train_iter["labels"].to(device), config.get("classification_mode"))
+        accuracy = metrics.accuracy_score(train_iter["labels"].cpu(), torch.argmax(logit, 1).cpu())
+
+        if(phase=="train"):
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+        
+        torch.cuda.empty_cache()
+
+        
+        loss_avg += loss.item()
+        acc_avg += accuracy
+        num_exp += 1
+
+    loss_avg /= num_exp
+    acc_avg /= num_exp
+
+    return loss_avg, acc_avg
 
 if __name__ == "__main__":
     print("=======Distillation========")
@@ -42,8 +114,8 @@ if __name__ == "__main__":
     Does not make a val set because it is not needed atm.
     DS Stores the entire images in memory. Not the most efficient in terms of memory but faster'''
     cad_all_path, labels_all = ShapeNetPCD(phase="train", data_root=def_conf.get("shapenet_path"), config=def_conf).load_data(data_root=def_conf.get("shapenet_path"), classification_mode=def_conf.get("classification_mode"))
-    val_loader = ShapeNetPCD(phase="val", data_root=def_conf.get("shapenet_path"), config=def_conf)
-
+    val_set = ShapeNetPCD(phase="val", data_root=def_conf.get("shapenet_path"), config=def_conf)
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
     indices_class = [[] for c in range(55)]
     for i, lab in enumerate(labels_all):
         indices_class[lab].append(i)
@@ -73,46 +145,41 @@ if __name__ == "__main__":
     else:
         print(f"======= Initialized Synthetic dataset with {ipc} CAD per class. CAD array shape is {cad_syn.shape} with values normalized between {cad_syn.min(), cad_syn.max()}===============")
 
+    print("========= Initializing SummaryWriter ==========")
+    summary_writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),"distillation"+str(time.time()))) #initialize sumamry writer
+
+
     ''' training '''
     optimizer_img = torch.optim.SGD([cad_syn, ], lr=def_conf.getfloat("lr_cad", 0.1), momentum=0.5) # optimizer_img for synthetic data
     optimizer_img.zero_grad()
-    criterion = nn.CrossEntropyLoss().to(device)
+    # criterion = nn.CrossEntropyLoss().to(device)
 
     model_eval_pool = ["MINKENGINE"]
 
     print('%s training begins'%get_time())
     for it in range(total_iterations):
         if it in eval_iteration_pool:
-            ## TODO: Integrate the MinkEng eval model here, and find other possible evaluation models
+            ## TODO find other possible evaluation models
             for model_eval in model_eval_pool:
                 net = MinkowskiFCNN(
                     in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("classification_mode")
                 ).to(device)
-                cad_syn_eval, label_syn_eval = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
                 ## TODO: Import weights to the model, and eval and return accuracy
                 net.load_state_dict(loaded_dict['state_dict'])
-                net.eval()
-                syn_ds = TensorDataset(cad_syn_eval, label_syn_eval)
+                accs_train = []
                 for it_eval in range(def_conf.getint("num_eval")):
-                    acc_train, acc_test = evaluate_synset(it_eval, net, syn_ds, val_loader, def_conf, loaded_dict)
-                acc = 0.9 ## TODO: Replace this value
+                    cad_syn_eval, label_syn_eval = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
+                    syn_ds = TensorDataset(cad_syn_eval, label_syn_eval)
+                    syn_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
+                    acc_train, acc_test = evaluate_synset(it, it_eval, net, syn_loader, val_loader, def_conf, loaded_dict, device, summary_writer)
+                    accs_train.append(acc_train)
+                ## TODO maybe decrease the size of the val set.... 
 
             '''Save point cloud'''
             ## TODO Save point cloud
+            ## TODO Make sure that PCD values are still normalized from -1 to 1
 
-def evaluate_synset(iteration, model, syn_ds, val_loader, config, checkpoint_load):
-    loss_avg, acc_avg, num_exp = 0, 0, 0
-    optimizer_model = optim.SGD(
-        net.parameters(),
-        lr=def_conf.getfloat("lr"),
-        momentum=0.9,
-        weight_decay=def_conf.getfloat("weight_decay"),
-    )
-    scheduler_model = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer_model,
-        T_max=def_conf.getint("max_steps"),
-    )
-    optimizer_model.load_state_dict(checkpoint_load['optimizer'])
-    scheduler_model.load_state_dict(checkpoint_load['scheduler'])
-    ## TODO continue epoch passing through the synthetic, and through the original
-    
+    ## TODO Create network for DD
+    ## TODO Improved logging. Instead of the difficult calculation. 
+
+        

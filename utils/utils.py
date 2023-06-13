@@ -48,12 +48,8 @@ class TensorDataset(Dataset):
         self.labels = labels.detach()
 
     def __getitem__(self, index):
-        pcd = o3d.io.read_point_cloud(self.cad[index])
-        voxel_sz = 0.025
-        downpcd = pcd.voxel_down_sample(voxel_size=voxel_sz)
-        xyz = np.asarray(downpcd.points)
         label = self.labels[index]
-        xyz = torch.from_numpy(xyz)
+        xyz = self.cad[index]
         return {
             "coordinates": xyz.to(torch.float32),
             "features": xyz.to(torch.float32),
