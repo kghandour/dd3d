@@ -2,7 +2,7 @@ from sklearn import metrics
 import torch
 from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
-from utils.utils import TensorDataset, get_loops, get_rand_cad, get_cad_points, get_time
+from utils.utils import TensorDataset, get_loops, get_rand_cad, get_cad_points, get_time, save_cad
 import configparser
 import os
 import numpy as np
@@ -30,11 +30,11 @@ def evaluate_synset(it, iteration, net, syn_ds, val_loader, config, checkpoint_l
     )
     optimizer_model.load_state_dict(checkpoint_load['optimizer'])
     scheduler_model.load_state_dict(checkpoint_load['scheduler'])
-    ## TODO continue epoch passing through the synthetic, and through the original
     time_start = time.time()
 
     epoch_eval_train = config.getint("epoch_eval_train")
     loss_train, acc_train = 0, 0
+    ## TODO: Initial randomly init synth heavily modifies the classifier network. Reduced Epochs to 1 from 10 to reduce impact.
     for ep in range(epoch_eval_train+1):
         loss_train, acc_train = train_classifier(net, device, config, syn_ds, "train", optimizer_model, scheduler_model)
         if(logging):
@@ -94,7 +94,6 @@ if __name__ == "__main__":
     parser.add_argument("--log", action=argparse.BooleanOptionalAction, default=True, help="Log this trial? Default is True")
     args = parser.parse_args()
     logging = args.log
-    print(logging)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     config = configparser.ConfigParser()
     config.read("configs/distillation_config.ini")
@@ -126,7 +125,6 @@ if __name__ == "__main__":
     cad_all_path, labels_all = ShapeNetPCD(phase="train", data_root=def_conf.get("shapenet_path"), config=def_conf).load_data(data_root=def_conf.get("shapenet_path"), classification_mode=def_conf.get("classification_mode"))
     val_set = ShapeNetPCD(phase="val", data_root=def_conf.get("shapenet_path"), config=def_conf, for_distillation=True)
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
-    indices_class = [[] for c in range(55)]
     for i, lab in enumerate(labels_all):
         indices_class[lab].append(i)
 
@@ -175,20 +173,22 @@ if __name__ == "__main__":
                 net = MinkowskiFCNN(
                     in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("classification_mode")
                 ).to(device)
-                ## TODO: Import weights to the model, and eval and return accuracy
                 net.load_state_dict(loaded_dict['state_dict'])
                 accs_train = []
+                ## TODO: Check for the num_evals good value.
                 for it_eval in range(def_conf.getint("num_eval")):
                     cad_syn_eval, label_syn_eval = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
                     syn_ds = TensorDataset(cad_syn_eval, label_syn_eval)
                     syn_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
                     acc_train, acc_test = evaluate_synset(it, it_eval, net, syn_loader, val_loader, def_conf, loaded_dict, device, summary_writer)
                     accs_train.append(acc_train)
-                ## TODO maybe decrease the size of the val set.... 
 
             '''Save point cloud'''
             ## TODO Save point cloud
             ## TODO Make sure that PCD values are still normalized from -1 to 1
+            print("====== Exporting Point Clouds ======")
+            save_cad(cad_syn, def_conf)
+
 
     ## TODO Create network for DD
     ## TODO Improved logging. Instead of the difficult calculation. 

@@ -1,9 +1,10 @@
+import copy
 import numpy as np
 import torch
 import time
 import open3d as o3d
 from torch.utils.data import Dataset
-
+from classification_model.shapepcd_set import class_id, get_class_name_from_id
 
 def get_loops(ipc):
     # Get the two hyper-parameters of outer-loop and inner-loop.
@@ -41,6 +42,18 @@ def get_cad_points(path, num_points):
     np.random.shuffle(xyz)
     xyz = xyz[:num_points]
     return xyz.to(torch.float32)
+
+def save_cad(cad_list, config):
+    cad_list_copy = copy.deepcopy(cad_list.detach().cpu().numpy())
+    for i, cad in enumerate(cad_list_copy):
+        cad[cad<-1] = -1
+        cad[cad>1] = 1
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(np.asarray(cad))
+        ipc = config.getint("n_cad_per_class", 1)
+        name = get_class_name_from_id(i//ipc)
+        o3d.io.write_point_cloud(config.get("save_path")+name+".ply", pcd)
+
 
 class TensorDataset(Dataset):
     def __init__(self, cad, labels): 
