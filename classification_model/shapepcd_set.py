@@ -32,17 +32,18 @@ class ShapeNetPCD(Dataset):
             config,
             transform = None,
             num_points = 2048,
+            for_distillation = False
         ) -> None:
         Dataset.__init__(self)
         classification_mode = config.get("classification_mode")
         cls_name = config.get("binary_class_name")
         self.phase = "val" if phase in ["val", "test"] else "train"
-        self.data, self.label = self.load_data(data_root, classification_mode, cls_name)
+        self.data, self.label = self.load_data(data_root, classification_mode, cls_name, for_distillation)
         self.transform = transform
         self.num_points = num_points
         self.classification_mode = classification_mode
 
-    def load_data(self, data_root, classification_mode, cls_name=None):
+    def load_data(self, data_root, classification_mode, cls_name=None, for_distillation=False):
         data, labels = [], []
         assert os.path.exists(data_root), f"{data_root} does not exist"
         if(cls_name is not None):
@@ -67,9 +68,14 @@ class ShapeNetPCD(Dataset):
         if(self.phase =="val"):
             if(classification_mode == "multi"):
                 for key in VAL_DICT.keys():
-                    for model in VAL_DICT[key]:
-                        labels.append(class_id[key])
-                        data.append(model)
+                    if(for_distillation):
+                        for model in VAL_DICT[key][:20]:
+                            labels.append(class_id[key])
+                            data.append(model)
+                    else:
+                        for model in VAL_DICT[key]:
+                            labels.append(class_id[key])
+                            data.append(model)
             else:
                 for model in VAL_DICT[cls_name]:
                     labels.append(1)

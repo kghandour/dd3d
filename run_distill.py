@@ -13,6 +13,8 @@ import copy
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 import time
+import argparse
+
 
 
 def evaluate_synset(it, iteration, net, syn_ds, val_loader, config, checkpoint_load, device, summary_writer):
@@ -32,17 +34,20 @@ def evaluate_synset(it, iteration, net, syn_ds, val_loader, config, checkpoint_l
     time_start = time.time()
 
     epoch_eval_train = config.getint("epoch_eval_train")
+    loss_train, acc_train = 0, 0
     for ep in range(epoch_eval_train+1):
         loss_train, acc_train = train_classifier(net, device, config, syn_ds, "train", optimizer_model, scheduler_model)
-        summary_writer.add_scalar("classiifcation/loss_train", loss_train, it*100000+iteration*1000+ep)
-        summary_writer.add_scalar("classiifcation/acc_train", acc_train, it*100000+iteration*1000+ep)
+        if(logging):
+            summary_writer.add_scalar("classiifcation/loss_train", loss_train, it*100000+iteration*1000+ep)
+            summary_writer.add_scalar("classiifcation/acc_train", acc_train, it*100000+iteration*1000+ep)
         print('Evaluating iteration/epoch: %d training loss: %f training accuracy: %f' % (it*100000+iteration*1000+ep, loss_train, acc_train))
-
     time_train = time.time() - time_start
-    summary_writer.add_scalar("classiifcation/time_train", time_train, it*100000+iteration*1000+ep)
+    if(logging):
+        summary_writer.add_scalar("classiifcation/time_train", time_train, it*100000+iteration*1000+ep)
     loss_val, acc_val = train_classifier(net, device, config, val_loader, "val", optimizer_model, scheduler_model)
-    summary_writer.add_scalar("classiifcation/loss_val", loss_val, it*100000+iteration*1000+ep)
-    summary_writer.add_scalar("classiifcation/acc_val", acc_val, it*100000+iteration*1000+ep)
+    if(logging):
+        summary_writer.add_scalar("classiifcation/loss_val", loss_val, it*100000+iteration*1000+ep)
+        summary_writer.add_scalar("classiifcation/acc_val", acc_val, it*100000+iteration*1000+ep)
     print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, epoch_eval_train, int(time_train), loss_train, acc_train, acc_val))
     return acc_train, acc_val
 
@@ -85,6 +90,11 @@ def train_classifier(net, device, config, loader, phase, optimizer, scheduler):
 
 if __name__ == "__main__":
     print("=======Distillation========")
+    parser = argparse.ArgumentParser(description='Parameter Processing')
+    parser.add_argument("--log", action=argparse.BooleanOptionalAction, default=True, help="Log this trial? Default is True")
+    args = parser.parse_args()
+    logging = args.log
+    print(logging)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     config = configparser.ConfigParser()
     config.read("configs/distillation_config.ini")
@@ -114,7 +124,7 @@ if __name__ == "__main__":
     Does not make a val set because it is not needed atm.
     DS Stores the entire images in memory. Not the most efficient in terms of memory but faster'''
     cad_all_path, labels_all = ShapeNetPCD(phase="train", data_root=def_conf.get("shapenet_path"), config=def_conf).load_data(data_root=def_conf.get("shapenet_path"), classification_mode=def_conf.get("classification_mode"))
-    val_set = ShapeNetPCD(phase="val", data_root=def_conf.get("shapenet_path"), config=def_conf)
+    val_set = ShapeNetPCD(phase="val", data_root=def_conf.get("shapenet_path"), config=def_conf, for_distillation=True)
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
     indices_class = [[] for c in range(55)]
     for i, lab in enumerate(labels_all):
@@ -146,8 +156,9 @@ if __name__ == "__main__":
         print(f"======= Initialized Synthetic dataset with {ipc} CAD per class. CAD array shape is {cad_syn.shape} with values normalized between {cad_syn.min(), cad_syn.max()}===============")
 
     print("========= Initializing SummaryWriter ==========")
-    summary_writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),"distillation"+str(time.time()))) #initialize sumamry writer
-
+    if(logging):
+        summary_writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),"distillation"+str(time.time()))) #initialize sumamry writer
+    else: summary_writer=None
 
     ''' training '''
     optimizer_img = torch.optim.SGD([cad_syn, ], lr=def_conf.getfloat("lr_cad", 0.1), momentum=0.5) # optimizer_img for synthetic data
