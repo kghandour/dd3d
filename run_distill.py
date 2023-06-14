@@ -184,10 +184,13 @@ if __name__ == "__main__":
                     accs_train.append(acc_train)
 
             '''Save point cloud'''
-            ## TODO Save point cloud
-            ## TODO Make sure that PCD values are still normalized from -1 to 1
             print("====== Exporting Point Clouds ======")
             save_cad(cad_syn, def_conf)
+
+        ## TODO Add synthetic network, optimizer and SGD
+
+        
+
 
 
     ## TODO Create network for DD
