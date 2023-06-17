@@ -2,7 +2,7 @@ from sklearn import metrics
 import torch
 from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
-from utils.utils import RealTensorDataset, TensorDataset, get_loops, get_rand_cad, get_cad_points, get_time, save_cad
+from utils.utils import RealTensorDataset, TensorDataset, get_loops, get_rand_cad, get_cad_points, get_time, match_loss, save_cad
 import configparser
 import os
 import numpy as np
@@ -215,7 +215,7 @@ if __name__ == "__main__":
         loss_avg = 0
 
         for ol in range(outer_loop):
-            loss = torch.tensor(0.0).to(device)
+            loss = torch.tensor(0.0, requires_grad=True).to(device)
             for c in range(num_classes):
                 cad_real_class = get_rand_cad(c, 4, indices_class, cad_all_path)
                 lab_real_class = torch.ones((cad_real_class.shape[0],), device=device, dtype=torch.long) * c
@@ -252,9 +252,17 @@ if __name__ == "__main__":
                 gw_syn = list((_.detach().clone() for _ in gw_syn))
 
                 print("Loss real: ", loss_real, "Loss Synth ", loss_syn)
+                loss += match_loss(gw_syn, gw_real, "ours", device=device)
 
+                print("Loss Matching: ", loss)
+                optimizer_distill.zero_grad()
+                loss.backward()
+                optimizer_distill.step()
+                loss_avg += loss.item() 
+
+                if ol == outer_loop - 1:
+                    break
                 exit()
-                
     ## TODO Improved logging. Instead of the difficult calculation. 
 
         
