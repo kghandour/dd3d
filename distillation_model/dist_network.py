@@ -10,14 +10,15 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         in_channel,
         out_channel,
         embedding_channel=1024,
-        channels=(32, 48, 64, 96, 128),
+        channels=(256, 512, 1024, 2048),
         D=3,
         num_points = 2048,
         net_depth = 3
     ):
         ME.MinkowskiNetwork.__init__(self, D)
+        self.FC = self.FCLayer(in_channel=in_channel, out_channel=channels[0])
         self.features, shape_feat = self.network_initialization(
-            in_channel,
+            channels[0],
             out_channel,
             channels=channels,
             embedding_channel=embedding_channel,
@@ -35,6 +36,13 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         )
         self.weight_initialization()
 
+    def FCLayer(self, in_channel, out_channel):
+        return nn.Sequential(
+            ME.MinkowskiLinear(in_channel, out_channel, bias=False),
+            ME.MinkowskiBatchNorm(out_channel),
+            ME.MinkowskiLeakyReLU(),
+        )
+
     def network_initialization(
         self,
         in_channel,
@@ -48,21 +56,22 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
     ):
         shape_feat = [in_channel, num_points]
         layers = []
+        ## TODO: Need to linear layer then sparse it.
         for d in range(net_depth):
-            layer += nn.Sequential(
+            layers += nn.Sequential(
             ME.MinkowskiConvolution(
                 in_channel,
-                channels[d],
+                channels[d+1],
                 kernel_size=kernel_size,
                 stride=1,
                 dimension=self.D,
             ),
-            ME.MinkowskiBatchNorm(channels[d]),
+            ME.MinkowskiBatchNorm(channels[d+1]),
             ME.MinkowskiLeakyReLU(),
             ME.MinkowskiMaxPooling(kernel_size=3, stride=2, dimension=D)
             )
-            in_channel = channels[d]
-            shape_feat[0] = channels[d]
+            in_channel = channels[d+1]
+            shape_feat[0] = channels[d+1]
             shape_feat[1] //= 2
         
         return nn.Sequential(*layers), shape_feat
@@ -78,7 +87,8 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
                 nn.init.constant_(m.bn.bias, 0)
 
     def forward(self, x: ME.TensorField):
-        out = self.features(x)
-        out= out.view(out.size(0), -1)
-        out = self.classifier(out)
+        out = self.FC(x)
+        out = out.sparse()
+        out = self.features(out)
+        out = self.classifier(out).F
         return out

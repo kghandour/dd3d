@@ -71,3 +71,23 @@ class TensorDataset(Dataset):
 
     def __len__(self):
         return self.cad.shape[0]
+    
+
+class RealTensorDataset(Dataset):
+    def __init__(self, cad, labels): 
+        self.cad = cad
+        self.labels = labels
+
+    def __getitem__(self, index):
+        pcd = o3d.io.read_point_cloud(self.cad[index])
+        xyz = np.asarray(pcd.points)
+        label = self.labels[index]
+        xyz = torch.from_numpy(xyz)
+        return {
+            "coordinates": xyz.to(torch.float32),
+            "features": xyz.to(torch.float32),
+            "label": label,
+        }
+    
+    def __len__(self):
+        return self.cad.shape[0]

@@ -2,7 +2,7 @@ from sklearn import metrics
 import torch
 from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
-from utils.utils import TensorDataset, get_loops, get_rand_cad, get_cad_points, get_time, save_cad
+from utils.utils import RealTensorDataset, TensorDataset, get_loops, get_rand_cad, get_cad_points, get_time, save_cad
 import configparser
 import os
 import numpy as np
@@ -14,6 +14,8 @@ from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 import time
 import argparse
+from distillation_model.dist_network import MinkowskiDistill
+import torch.nn.functional as F
 
 
 
@@ -170,17 +172,17 @@ if __name__ == "__main__":
         if it in eval_iteration_pool:
             ## TODO find other possible evaluation models
             for model_eval in model_eval_pool:
-                net = MinkowskiFCNN(
+                net_classifier = MinkowskiFCNN(
                     in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("classification_mode")
                 ).to(device)
-                net.load_state_dict(loaded_dict['state_dict'])
+                net_classifier.load_state_dict(loaded_dict['state_dict'])
                 accs_train = []
                 ## TODO: Check for the num_evals good value.
                 for it_eval in range(def_conf.getint("num_eval")):
                     cad_syn_eval, label_syn_eval = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
                     syn_ds = TensorDataset(cad_syn_eval, label_syn_eval)
                     syn_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
-                    acc_train, acc_test = evaluate_synset(it, it_eval, net, syn_loader, val_loader, def_conf, loaded_dict, device, summary_writer)
+                    acc_train, acc_test = evaluate_synset(it, it_eval, net_classifier, syn_loader, val_loader, def_conf, loaded_dict, device, summary_writer)
                     accs_train.append(acc_train)
 
             '''Save point cloud'''
@@ -188,12 +190,45 @@ if __name__ == "__main__":
             save_cad(cad_syn, def_conf)
 
         ## TODO Add synthetic network, optimizer and SGD
+        print("====== Initializing Distillation Network ======= ")
+        net_distillation = MinkowskiDistill(in_channel=3, out_channel=num_classes, embedding_channel=1024, num_points=num_points).to(device)
+        net_distillation.train()
+        optimizer_distill = optim.SGD(
+            net_distillation.parameters(),
+            lr=def_conf.getfloat("lr_cad"),
+            momentum=0.9,
+            weight_decay=def_conf.getfloat("weight_decay_distillation"),
+        )
+        scheduler_distill = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer_distill,
+            T_max=def_conf.getint("max_steps"),
+        )
+        optimizer_distill.zero_grad()
+        loss_avg = 0
 
-        
-
-
-
-    ## TODO Create network for DD
+        for ol in range(outer_loop):
+            loss = torch.tensor(0.0).to(device)
+            for c in range(num_classes):
+                cad_real_class = get_rand_cad(c, 4, indices_class, cad_all_path)
+                lab_real_class = torch.ones((cad_real_class.shape[0],), device=device, dtype=torch.long) * c
+                cad_syn_class = cad_syn[c*ipc:(c+1)*ipc]
+                lab_syn_class = torch.ones((ipc), device=device, dtype=torch.long) * c
+                ## Shapes match expectation so far.
+                ## TODO Create loader from array for real and synthetic
+                input_real_ds = RealTensorDataset(cad_real_class, lab_real_class)
+                input_real_loader = torch.utils.data.DataLoader(input_real_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
+                for input_real_iter in input_real_loader:
+                    input_real = create_input_batch(
+                        input_real_iter, device=device, quantization_size=def_conf.getfloat("voxel_size")
+                    )
+                    print(input_real.shape)
+                    output_real = net_distillation(input_real)
+                    print(output_real.shape)
+                    print(lab_real_class.shape)
+                    loss_real =  F.binary_cross_entropy(torch.sigmoid(output_real).squeeze(), lab_real_class.squeeze())
+                    print("Loss for real distillation ", loss_real)
+                    exit()
+                
     ## TODO Improved logging. Instead of the difficult calculation. 
 
         
