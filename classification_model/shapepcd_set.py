@@ -11,6 +11,9 @@ from classification_model.train_val_split import TRAIN_DICT, VAL_DICT
 
 class_id = {'pillow': 0, 'bowl': 1, 'rocket': 2, 'keyboard': 3, 'sofa': 4, 'car': 5, 'laptop': 6, 'jar': 7, 'chair': 8, 'rifle': 9, 'watercraft': 10, 'telephone': 11, 'bottle': 12, 'cellphone': 13, 'airplane': 14, 'bookshelf': 15, 'lamp': 16, 'bus': 17, 'birdhouse': 18, 'faucet': 19, 'table': 20, 'stove': 21, 'cap': 22, 'can': 23, 'mailbox': 24, 'bag': 25, 'loudspeaker': 26, 'piano': 27, 'knife': 28, 'guitar': 29, 'bench': 30, 'train': 31, 'display': 32, 'dishwasher': 33, 'microwaves': 34, 'bathtub': 35, 'helmet': 36, 'file cabinet': 37, 'trash bin': 38, 'cabinet': 39, 'motorbike': 40, 'flowerpot': 41, 'basket': 42, 'tower': 43, 'camera': 44, 'pistol': 45, 'remote': 46, 'skateboard': 47, 'printer': 48, 'bed': 49, 'mug': 50, 'washer': 51, 'microphone': 52, 'clock': 53, 'earphone': 54}
 
+def get_class_name_from_id(val):
+    return [k for k, v in class_id.items() if v == val][0]
+
 def minkowski_collate_fn(list_data):
     coordinates_batch, features_batch, labels_batch = ME.utils.sparse_collate(
         [d["coordinates"] for d in list_data],
@@ -32,20 +35,22 @@ class ShapeNetPCD(Dataset):
             config,
             transform = None,
             num_points = 2048,
+            for_distillation = False
         ) -> None:
         Dataset.__init__(self)
         classification_mode = config.get("classification_mode")
         cls_name = config.get("binary_class_name")
         self.phase = "val" if phase in ["val", "test"] else "train"
-        self.data, self.label = self.load_data(data_root, classification_mode, cls_name)
+        self.data, self.label = self.load_data(data_root, classification_mode, cls_name, for_distillation)
         self.transform = transform
         self.num_points = num_points
         self.classification_mode = classification_mode
 
-    def load_data(self, data_root, classification_mode, cls_name):
+    def load_data(self, data_root, classification_mode, cls_name=None, for_distillation=False):
         data, labels = [], []
         assert os.path.exists(data_root), f"{data_root} does not exist"
-        target_class_dir = os.path.join(data_root,cls_name)
+        if(cls_name is not None):
+            target_class_dir = os.path.join(data_root,cls_name)
 
         if(self.phase == "train"):
             if(classification_mode == "multi"):
@@ -66,9 +71,14 @@ class ShapeNetPCD(Dataset):
         if(self.phase =="val"):
             if(classification_mode == "multi"):
                 for key in VAL_DICT.keys():
-                    for model in VAL_DICT[key]:
-                        labels.append(class_id[key])
-                        data.append(model)
+                    if(for_distillation):
+                        for model in VAL_DICT[key][:20]:
+                            labels.append(class_id[key])
+                            data.append(model)
+                    else:
+                        for model in VAL_DICT[key]:
+                            labels.append(class_id[key])
+                            data.append(model)
             else:
                 for model in VAL_DICT[cls_name]:
                     labels.append(1)

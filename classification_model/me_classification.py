@@ -43,6 +43,7 @@ def create_input_batch(batch, device="cuda", quantization_size=0.05):
         device=device,
     )
    
+
 def test(net, device, config, val_loader, phase="val"):
 
     net.eval()
