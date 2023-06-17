@@ -19,7 +19,6 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         self.FC = self.FCLayer(in_channel=in_channel, out_channel=channels[0])
         self.features, shape_feat = self.network_initialization(
             channels[0],
-            out_channel,
             channels=channels,
             embedding_channel=embedding_channel,
             kernel_size=3,
@@ -32,8 +31,13 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
             ME.MinkowskiLinear(embedding_channel * 2, 512, bias=False),
             ME.MinkowskiBatchNorm(512),
             ME.MinkowskiLeakyReLU(),
+            ME.MinkowskiDropout(),
             ME.MinkowskiLinear(512, out_channel, bias=True),
         )
+        self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
+        self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
+        self.pool = ME.MinkowskiMaxPooling(kernel_size=3, stride=2, dimension=D)
+
         self.weight_initialization()
 
     def FCLayer(self, in_channel, out_channel):
@@ -46,7 +50,6 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
     def network_initialization(
         self,
         in_channel,
-        out_channel,
         channels,
         embedding_channel,
         kernel_size,
@@ -56,7 +59,6 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
     ):
         shape_feat = [in_channel, num_points]
         layers = []
-        ## TODO: Need to linear layer then sparse it.
         for d in range(net_depth):
             layers += nn.Sequential(
             ME.MinkowskiConvolution(
@@ -90,5 +92,6 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         out = self.FC(x)
         out = out.sparse()
         out = self.features(out)
-        out = self.classifier(out).F
+        x1 = self.global_max_pool(out)
+        out = self.classifier(x1).F
         return out

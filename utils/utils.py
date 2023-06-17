@@ -81,6 +81,7 @@ class RealTensorDataset(Dataset):
     def __getitem__(self, index):
         pcd = o3d.io.read_point_cloud(self.cad[index])
         xyz = np.asarray(pcd.points)
+        xyz = xyz[:2048]
         label = self.labels[index]
         xyz = torch.from_numpy(xyz)
         return {

@@ -68,7 +68,9 @@ def train_classifier(net, device, config, loader, phase, optimizer, scheduler):
         input = create_input_batch(
             train_iter, device=device, quantization_size=config.getfloat("voxel_size")
         )
+        # print("Input batch shape for classifier ", input.shape)
         logit = net(input)
+        # print("Network Classifier output shape ", logit.shape, "Label output shape", train_iter["labels"].shape)
         loss = criterion(logit, train_iter["labels"].to(device), config.get("classification_mode"))
         accuracy = metrics.accuracy_score(train_iter["labels"].cpu(), torch.argmax(logit, 1).cpu())
 
@@ -192,6 +194,10 @@ if __name__ == "__main__":
         ## TODO Add synthetic network, optimizer and SGD
         print("====== Initializing Distillation Network ======= ")
         net_distillation = MinkowskiDistill(in_channel=3, out_channel=num_classes, embedding_channel=1024, num_points=num_points).to(device)
+        # net_distillation = MinkowskiFCNN(in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("classification_mode")).to(device)
+        print("====== Distillation Network =========")
+        print(net_distillation)
+        print("=======================================")
         net_distillation.train()
         optimizer_distill = optim.SGD(
             net_distillation.parameters(),
@@ -221,13 +227,10 @@ if __name__ == "__main__":
                     input_real = create_input_batch(
                         input_real_iter, device=device, quantization_size=def_conf.getfloat("voxel_size")
                     )
-                    print(input_real.shape)
                     output_real = net_distillation(input_real)
-                    print(output_real.shape)
-                    print(lab_real_class.shape)
-                    loss_real =  F.binary_cross_entropy(torch.sigmoid(output_real).squeeze(), lab_real_class.squeeze())
-                    print("Loss for real distillation ", loss_real)
-                    exit()
+                    loss_real =  F.cross_entropy(output_real, input_real_iter["labels"].to(device), reduction="mean")
+                print("Loss for real distillation ", loss_real.item())
+                exit()
                 
     ## TODO Improved logging. Instead of the difficult calculation. 
 
