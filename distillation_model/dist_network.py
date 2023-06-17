@@ -29,7 +29,7 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         num_feat = shape_feat[0]*shape_feat[1]
         self.classifier = nn.Sequential(
             ME.MinkowskiLinear(embedding_channel * 2, 512, bias=False),
-            ME.MinkowskiBatchNorm(512),
+            # ME.MinkowskiBatchNorm(512),
             ME.MinkowskiLeakyReLU(),
             ME.MinkowskiDropout(),
             ME.MinkowskiLinear(512, out_channel, bias=True),
@@ -43,7 +43,7 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
     def FCLayer(self, in_channel, out_channel):
         return nn.Sequential(
             ME.MinkowskiLinear(in_channel, out_channel, bias=False),
-            ME.MinkowskiBatchNorm(out_channel),
+            # ME.MinkowskiBatchNorm(out_channel),
             ME.MinkowskiLeakyReLU(),
         )
 
@@ -68,7 +68,7 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
                 stride=1,
                 dimension=self.D,
             ),
-            ME.MinkowskiBatchNorm(channels[d+1]),
+            # ME.MinkowskiBatchNorm(channels[d+1]),
             ME.MinkowskiLeakyReLU(),
             ME.MinkowskiMaxPooling(kernel_size=3, stride=2, dimension=D)
             )
