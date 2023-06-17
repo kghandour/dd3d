@@ -199,6 +199,8 @@ if __name__ == "__main__":
         print(net_distillation)
         print("=======================================")
         net_distillation.train()
+        net_parameters = list(net_distillation.parameters())
+
         optimizer_distill = optim.SGD(
             net_distillation.parameters(),
             lr=def_conf.getfloat("lr_cad"),
@@ -223,13 +225,34 @@ if __name__ == "__main__":
                 ## TODO Create loader from array for real and synthetic
                 input_real_ds = RealTensorDataset(cad_real_class, lab_real_class)
                 input_real_loader = torch.utils.data.DataLoader(input_real_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
+                loss_real_list = []
+                loss_syn_list = []
                 for input_real_iter in input_real_loader:
                     input_real = create_input_batch(
                         input_real_iter, device=device, quantization_size=def_conf.getfloat("voxel_size")
                     )
                     output_real = net_distillation(input_real)
                     loss_real =  F.cross_entropy(output_real, input_real_iter["labels"].to(device), reduction="mean")
-                print("Loss for real distillation ", loss_real.item())
+                    loss_real_list.append(loss_real)
+                loss_real = sum(loss_real_list)/len(loss_real_list)
+                gw_real = torch.autograd.grad(loss_real, net_parameters)
+                gw_real = list((_.detach().clone() for _ in gw_real))
+
+                syn_ds = TensorDataset(cad_syn_class, lab_syn_class)
+                syn_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=False)
+                for input_real_iter in syn_loader:
+                    input_real = create_input_batch(
+                        input_real_iter, device=device, quantization_size=def_conf.getfloat("voxel_size")
+                    )
+                    output_syn = net_distillation(input_real)
+                    loss_syn =  F.cross_entropy(output_syn, input_real_iter["labels"].to(device), reduction="mean")
+                    loss_syn_list.append(loss_syn)                
+                loss_syn = sum(loss_syn_list)/len(loss_syn_list)
+                gw_syn = torch.autograd.grad(loss_syn, net_parameters)
+                gw_syn = list((_.detach().clone() for _ in gw_syn))
+
+                print("Loss real: ", loss_real, "Loss Synth ", loss_syn)
+
                 exit()
                 
     ## TODO Improved logging. Instead of the difficult calculation. 
