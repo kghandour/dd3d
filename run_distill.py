@@ -220,6 +220,7 @@ if __name__ == "__main__":
                 cad_real_class = get_rand_cad(c, 4, indices_class, cad_all_path)
                 lab_real_class = torch.ones((cad_real_class.shape[0],), device=device, dtype=torch.long) * c
                 cad_syn_class = cad_syn[c*ipc:(c+1)*ipc]
+                cad_syn_orig = copy.deepcopy(cad_syn_class.detach())
                 lab_syn_class = torch.ones((ipc), device=device, dtype=torch.long) * c
                 ## Shapes match expectation so far.
                 ## TODO Create loader from array for real and synthetic
@@ -251,18 +252,19 @@ if __name__ == "__main__":
                 gw_syn = torch.autograd.grad(loss_syn, net_parameters)
                 gw_syn = list((_.detach().clone() for _ in gw_syn))
 
-                print("Loss real: ", loss_real, "Loss Synth ", loss_syn)
                 loss += match_loss(gw_syn, gw_real, "ours", device=device)
 
-                print("Loss Matching: ", loss)
-                optimizer_distill.zero_grad()
-                loss.backward()
-                optimizer_distill.step()
-                loss_avg += loss.item() 
+            print("Loss Matching: ", loss)
+            optimizer_distill.zero_grad()
+            loss.backward()
+            optimizer_distill.step()
+            loss_avg += loss.item() 
 
-                if ol == outer_loop - 1:
-                    break
-                exit()
+            print(torch.nonzero(cad_syn_class-cad_syn_orig))
+
+            if ol == outer_loop - 1:
+                break
+            exit()
     ## TODO Improved logging. Instead of the difficult calculation. 
 
         
