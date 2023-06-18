@@ -268,6 +268,12 @@ if __name__ == "__main__":
             syn_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
             for il in range(inner_loop):
                 train_classifier(net_distillation, device, def_conf, syn_loader, "train", optimizer_dist_net, scheduler_dist_net)
+        
+        loss_avg /= (num_classes*outer_loop)
+
+        if it%10 == 0:
+            print('%s iter = %04d, loss = %.4f' % (get_time(), it, loss_avg))
+
 
     ## TODO Improved logging. Instead of the difficult calculation. 
 
