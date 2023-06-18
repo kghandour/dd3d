@@ -199,7 +199,7 @@ if __name__ == "__main__":
 
 
         '''Save point cloud'''
-        if(it % def_conf.getint("save_cad_and_eval_every") == 0):
+        if(it + 1 % def_conf.getint("save_cad_and_eval_every") == 0):
             print("====== Exporting Point Clouds ======")
             save_cad(cad_syn, def_conf, it)
 
