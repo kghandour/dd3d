@@ -9,8 +9,8 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         self,
         in_channel,
         out_channel,
-        embedding_channel=1024,
-        channels=(256, 512, 1024, 2048),
+        embedding_channel=256,
+        channels=(64, 128, 256, 512),
         D=3,
         num_points = 2048,
         net_depth = 3

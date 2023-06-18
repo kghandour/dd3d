@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import time
 import open3d as o3d
+import os
 from torch.utils.data import Dataset
 from classification_model.shapepcd_set import class_id, get_class_name_from_id
 
@@ -43,7 +44,7 @@ def get_cad_points(path, num_points):
     xyz = xyz[:num_points]
     return xyz.to(torch.float32)
 
-def save_cad(cad_list, config):
+def save_cad(cad_list, config, iteration):
     cad_list_copy = cad_list.clone().detach().cpu().numpy()
     for i, cad in enumerate(cad_list_copy):
         cad[cad<-1] = -1
@@ -52,7 +53,7 @@ def save_cad(cad_list, config):
         pcd.points = o3d.utility.Vector3dVector(np.asarray(cad))
         ipc = config.getint("n_cad_per_class", 1)
         name = get_class_name_from_id(i//ipc)
-        o3d.io.write_point_cloud(config.get("save_path")+name+".ply", pcd)
+        o3d.io.write_point_cloud(config.get("save_path")+name+"_"+str(iteration)+".ply", pcd)
 
 def distance_wb(gwr, gws):
     shape = gwr.shape
@@ -83,7 +84,7 @@ def match_loss(gw_syn, gw_real, dis_metric, device):
             gwr = gw_real[ig]
             gws = gw_syn[ig]
             dis += distance_wb(gwr, gws)
-
+    
     elif dis_metric == 'mse':
         gw_real_vec = []
         gw_syn_vec = []

@@ -98,7 +98,7 @@ if __name__ == "__main__":
     num_classes = def_conf.getint("num_classes", 2)
     outer_loop, inner_loop = get_loops(ipc) ## Variable defines the number of models per class
     total_iterations = def_conf.getint("total_iterations")
-    eval_iteration_pool = np.arange(0, total_iterations+1, 500).tolist()
+    eval_iteration_pool = np.arange(0, total_iterations+1, def_conf.getint("save_cad_and_eval_every")).tolist()
     num_points = def_conf.getint("num_points", 2048) ## Number of points
     load_model_path = def_conf.get("load_model")
     loaded_dict = torch.load(load_model_path)
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     ## Set it from -1 to 1
     cad_syn = ((-1-1)*cad_syn + 1).requires_grad_()
 
-    cad_syn_orig = cad_syn.clone().detach()
+    # cad_syn_orig = cad_syn.clone().detach()
 
     label_syn = torch.tensor(np.array([np.ones(ipc, dtype=int)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=device).view(-1)
 
@@ -198,13 +198,14 @@ if __name__ == "__main__":
 
 
 
-            '''Save point cloud'''
+        '''Save point cloud'''
+        if(it % def_conf.getint("save_cad_and_eval_every") == 0):
             print("====== Exporting Point Clouds ======")
-            save_cad(cad_syn.clone(), def_conf)
+            save_cad(cad_syn, def_conf, it)
 
 
         # net_distillation = MinkowskiFCNN(in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("overfit_1")).to(device)
-        net_distillation = MinkowskiDistill(in_channel=3, out_channel=num_classes, embedding_channel=1024, num_points=num_points).to(device)
+        net_distillation = MinkowskiDistill(in_channel=3, out_channel=num_classes, embedding_channel=256, num_points=num_points).to(device)
         net_distillation.train()
         net_parameters = list(net_distillation.parameters())
     
@@ -257,7 +258,7 @@ if __name__ == "__main__":
                 loss_syn = sum(loss_syn_list)/len(loss_syn_list)
                 gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
 
-                loss += match_loss(gw_syn, gw_real, "ours", device=device)
+                loss += match_loss(gw_syn, gw_real, "mse", device=device)
 
             optimizer_distillation.zero_grad()
             loss.backward()
