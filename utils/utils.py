@@ -110,6 +110,9 @@ def match_loss(gw_syn, gw_real, dis_metric, device):
     return dis
 
 
+def list_average(lst):
+    return sum(lst) / len(lst)
+
 class TensorDataset(Dataset):
     def __init__(self, cad, labels): 
         self.cad = cad

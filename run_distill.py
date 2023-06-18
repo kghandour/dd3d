@@ -2,7 +2,7 @@ from sklearn import metrics
 import torch
 from classification_model.augmentation import CoordinateTransformation, CoordinateTranslation
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
-from utils.utils import RealTensorDataset, TensorDataset, get_loops, get_rand_cad, get_cad_points, get_time, match_loss, save_cad
+from utils.utils import RealTensorDataset, TensorDataset, get_loops, get_rand_cad, get_cad_points, get_time, match_loss, save_cad, list_average
 import configparser
 import os
 import numpy as np
@@ -19,7 +19,7 @@ import torch.nn.functional as F
 
 
 
-def evaluate_synset(it, iteration, net, syn_ds, val_loader, config, checkpoint_load, device, summary_writer):
+def evaluate_synset(it, iteration, net, syn_ds, val_loader, config, checkpoint_load, device):
     optimizer_model = optim.SGD(
         net.parameters(),
         lr=config.getfloat("lr_classification"),
@@ -39,19 +39,10 @@ def evaluate_synset(it, iteration, net, syn_ds, val_loader, config, checkpoint_l
     ## TODO: Initial randomly init synth heavily modifies the classifier network. Reduced Epochs to 1 from 10 to reduce impact.
     for ep in range(epoch_eval_train+1):
         loss_train, acc_train = train_classifier(net, device, config, syn_ds, "train", optimizer_model, scheduler_model)
-        if(logging):
-            summary_writer.add_scalar("classiifcation/loss_train", loss_train, it*100000+iteration*1000+ep)
-            summary_writer.add_scalar("classiifcation/acc_train", acc_train, it*100000+iteration*1000+ep)
-        print('Evaluating iteration/epoch: %d training loss: %f training accuracy: %f' % (it*100000+iteration*1000+ep, loss_train, acc_train))
     time_train = time.time() - time_start
-    if(logging):
-        summary_writer.add_scalar("classiifcation/time_train", time_train, it*100000+iteration*1000+ep)
     loss_val, acc_val = train_classifier(net, device, config, val_loader, "val", optimizer_model, scheduler_model)
-    if(logging):
-        summary_writer.add_scalar("classiifcation/loss_val", loss_val, it*100000+iteration*1000+ep)
-        summary_writer.add_scalar("classiifcation/acc_val", acc_val, it*100000+iteration*1000+ep)
     print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, epoch_eval_train, int(time_train), loss_train, acc_train, acc_val))
-    return acc_train, acc_val
+    return acc_train, acc_val, time_train, loss_train, loss_val
 
 
 
@@ -140,9 +131,9 @@ if __name__ == "__main__":
     # RANDN results in a normal distribution. Values not limited from -1, 1.
     # cad_syn = torch.randn(size=(num_classes*ipc, num_points, channel), requires_grad=True, device=device) ## This is a normal distribution from with mean 0, variance 1. 
     # RAND might be a better choice (should be from 0 to 1 now)
-    cad_syn = torch.rand(size=(num_classes*ipc, num_points, channel), device=device, requires_grad=True)
+    cad_syn = torch.rand(size=(num_classes*ipc, num_points, channel), device=device)
     ## Set it from -1 to 1
-    # cad_syn = ((-1-1)*cad_syn + 1).requires_grad_()
+    cad_syn = ((-1-1)*cad_syn + 1).requires_grad_()
 
     cad_syn_orig = cad_syn.clone().detach()
 
@@ -174,6 +165,7 @@ if __name__ == "__main__":
     print('%s training begins'%get_time())
     for it in range(total_iterations):
         if it in eval_iteration_pool:
+            log_acc_train, log_acc_test, log_time_train, log_loss_train, log_loss_val = [], [], [], [], []
             ## TODO find other possible evaluation models
             for model_eval in model_eval_pool:
                 print("====== Testing Classifier =========")
@@ -188,8 +180,23 @@ if __name__ == "__main__":
                     cad_syn_eval, label_syn_eval = cad_syn.clone().detach(), label_syn.clone().detach() # avoid any unaware modification
                     syn_ds = TensorDataset(cad_syn_eval, label_syn_eval)
                     syn_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
-                    acc_train, acc_test = evaluate_synset(it, it_eval, net_classifier, syn_loader, val_loader, def_conf, loaded_dict, device, summary_writer)
+                    acc_train, acc_test, time_train, loss_train, loss_val = evaluate_synset(it, it_eval, net_classifier, syn_loader, val_loader, def_conf, loaded_dict, device)
                     accs_train.append(acc_train)
+                    log_acc_train.append(acc_train)
+                    log_acc_test.append(acc_test)
+                    log_time_train.append(time_train)
+                    log_loss_train.append(loss_train)
+                    log_loss_val.append(loss_val)
+            if(logging):
+                summary_writer.add_scalar("Classifier/Train_Accuracy", list_average(log_acc_train), it)
+                summary_writer.add_scalar("Classifier/Train_Time", list_average(log_time_train), it)
+                summary_writer.add_scalar("Classifier/Train_Loss", list_average(log_loss_train), it)
+                summary_writer.add_scalar("Classifier/Val_Accuracy", list_average(log_acc_test), it)
+                summary_writer.add_scalar("Classifier/Val_Loss", list_average(log_loss_val), it)
+            log_acc_train, log_acc_test, log_time_train, log_loss_train, log_loss_val = [], [], [], [], []
+
+
+
 
             '''Save point cloud'''
             print("====== Exporting Point Clouds ======")
@@ -197,7 +204,6 @@ if __name__ == "__main__":
 
 
         # net_distillation = MinkowskiFCNN(in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("overfit_1")).to(device)
-        print("====== Initializing Distillation Network ======= ")
         net_distillation = MinkowskiDistill(in_channel=3, out_channel=num_classes, embedding_channel=1024, num_points=num_points).to(device)
         net_distillation.train()
         net_parameters = list(net_distillation.parameters())
@@ -253,15 +259,12 @@ if __name__ == "__main__":
 
                 loss += match_loss(gw_syn, gw_real, "ours", device=device)
 
-            print("Loss Matching: ", loss)
             optimizer_distillation.zero_grad()
             loss.backward()
             optimizer_distillation.step()
-            loss_avg += loss.item() 
+            loss_avg += loss.item()
             # if ol == outer_loop - 1:
             #     break
-
-            print("==== Training Distillation Network ========")
             # cad_syn_train, label_syn_train = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
             cad_syn_train, label_syn_train = cad_syn.clone().detach(), label_syn.clone().detach() # avoid any unaware modification
             syn_ds = TensorDataset(cad_syn_train, label_syn_train)
@@ -273,8 +276,21 @@ if __name__ == "__main__":
 
         if it%10 == 0:
             print('%s iter = %04d, loss = %.4f' % (get_time(), it, loss_avg))
+            if(logging): summary_writer.add_scalar("Distillation/Loss_Average", loss_avg, it)
+        if( it%100 == 0):
+            print("=== Saving Model =====")
+            torch.save(
+                {
+                    "dist_state": net_distillation.state_dict(),
+                    "optimizer_dist_net": optimizer_dist_net.state_dict(),
+                    "optimizer_distillation": optimizer_distillation.state_dict(),
+                    "scheduler": scheduler_dist_net.state_dict(),
+                    "curr_iter": it,
+                    "cad_syn":cad_syn.clone(),
+                    "label_syn":label_syn.clone()
+                },
+                def_conf.get("distillation_model_name"),
+            )
 
-
-    ## TODO Improved logging. Instead of the difficult calculation. 
 
         
