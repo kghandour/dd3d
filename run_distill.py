@@ -140,22 +140,24 @@ if __name__ == "__main__":
     # RANDN results in a normal distribution. Values not limited from -1, 1.
     # cad_syn = torch.randn(size=(num_classes*ipc, num_points, channel), requires_grad=True, device=device) ## This is a normal distribution from with mean 0, variance 1. 
     # RAND might be a better choice (should be from 0 to 1 now)
-    cad_syn = torch.rand(size=(num_classes*ipc, num_points, channel), device=device)
+    cad_syn = torch.rand(size=(num_classes*ipc, num_points, channel), device=device, requires_grad=True)
     ## Set it from -1 to 1
-    cad_syn = ((-1-1)*cad_syn + 1).requires_grad_()
+    # cad_syn = ((-1-1)*cad_syn + 1).requires_grad_()
+
+    cad_syn_orig = cad_syn.clone().detach()
 
     label_syn = torch.tensor(np.array([np.ones(ipc, dtype=int)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=device).view(-1)
 
 
     ### For REAL initialization
-    if(def_conf.get("initialization")=="real"):
-        print("======= Initializing synthetic dataset from real data ==========")
-        for c in range(num_classes):
-            path_to_rand_cad = get_rand_cad(c, ipc, indices_class, cad_all_path)
-            cad_pts = get_cad_points(path_to_rand_cad, def_conf.getint("num_points"))
-            cad_syn.data[c*ipc:(c+1)*ipc] = cad_pts.detach().data
-    else:
-        print(f"======= Initialized Synthetic dataset with {ipc} CAD per class. CAD array shape is {cad_syn.shape} with values normalized between {cad_syn.min(), cad_syn.max()}===============")
+    # if(def_conf.get("initialization")=="real"):
+    #     print("======= Initializing synthetic dataset from real data ==========")
+    #     for c in range(num_classes):
+    #         path_to_rand_cad = get_rand_cad(c, ipc, indices_class, cad_all_path)
+    #         cad_pts = get_cad_points(path_to_rand_cad, def_conf.getint("num_points"))
+    #         cad_syn.data[c*ipc:(c+1)*ipc] = cad_pts.detach().data
+    # else:
+    #     print(f"======= Initialized Synthetic dataset with {ipc} CAD per class. CAD array shape is {cad_syn.shape} with values normalized between {cad_syn.min(), cad_syn.max()}===============")
 
     print("========= Initializing SummaryWriter ==========")
     if(logging):
@@ -163,8 +165,8 @@ if __name__ == "__main__":
     else: summary_writer=None
 
     ''' training '''
-    optimizer_img = torch.optim.SGD([cad_syn, ], lr=def_conf.getfloat("lr_cad", 0.1), momentum=0.5) # optimizer_img for synthetic data
-    optimizer_img.zero_grad()
+    optimizer_distillation = torch.optim.SGD([cad_syn, ], lr=def_conf.getfloat("lr_cad", 0.1), momentum=0.5) # optimizer_img for synthetic data
+    optimizer_distillation.zero_grad()
     # criterion = nn.CrossEntropyLoss().to(device)
 
     model_eval_pool = ["MINKENGINE"]
@@ -174,6 +176,7 @@ if __name__ == "__main__":
         if it in eval_iteration_pool:
             ## TODO find other possible evaluation models
             for model_eval in model_eval_pool:
+                print("====== Testing Classifier =========")
                 net_classifier = MinkowskiFCNN(
                     in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("classification_mode")
                 ).to(device)
@@ -181,7 +184,8 @@ if __name__ == "__main__":
                 accs_train = []
                 ## TODO: Check for the num_evals good value.
                 for it_eval in range(def_conf.getint("num_eval")):
-                    cad_syn_eval, label_syn_eval = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
+                    # cad_syn_eval, label_syn_eval = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
+                    cad_syn_eval, label_syn_eval = cad_syn.clone().detach(), label_syn.clone().detach() # avoid any unaware modification
                     syn_ds = TensorDataset(cad_syn_eval, label_syn_eval)
                     syn_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
                     acc_train, acc_test = evaluate_synset(it, it_eval, net_classifier, syn_loader, val_loader, def_conf, loaded_dict, device, summary_writer)
@@ -189,38 +193,34 @@ if __name__ == "__main__":
 
             '''Save point cloud'''
             print("====== Exporting Point Clouds ======")
-            save_cad(cad_syn, def_conf)
+            save_cad(cad_syn.clone(), def_conf)
 
-        ## TODO Add synthetic network, optimizer and SGD
+
+        # net_distillation = MinkowskiFCNN(in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("overfit_1")).to(device)
         print("====== Initializing Distillation Network ======= ")
         net_distillation = MinkowskiDistill(in_channel=3, out_channel=num_classes, embedding_channel=1024, num_points=num_points).to(device)
-        # net_distillation = MinkowskiFCNN(in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("classification_mode")).to(device)
-        print("====== Distillation Network =========")
-        print(net_distillation)
-        print("=======================================")
         net_distillation.train()
         net_parameters = list(net_distillation.parameters())
-
-        optimizer_distill = optim.SGD(
+    
+        optimizer_dist_net = optim.SGD(
             net_distillation.parameters(),
             lr=def_conf.getfloat("lr_cad"),
             momentum=0.9,
             weight_decay=def_conf.getfloat("weight_decay_distillation"),
         )
-        scheduler_distill = optim.lr_scheduler.CosineAnnealingLR(
-            optimizer_distill,
+        scheduler_dist_net = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer_dist_net,
             T_max=def_conf.getint("max_steps"),
         )
-        optimizer_distill.zero_grad()
+        optimizer_dist_net.zero_grad()
         loss_avg = 0
 
         for ol in range(outer_loop):
-            loss = torch.tensor(0.0, requires_grad=True).to(device)
+            loss = torch.tensor(0.0).to(device)
             for c in range(num_classes):
                 cad_real_class = get_rand_cad(c, 4, indices_class, cad_all_path)
                 lab_real_class = torch.ones((cad_real_class.shape[0],), device=device, dtype=torch.long) * c
-                cad_syn_class = cad_syn[c*ipc:(c+1)*ipc]
-                cad_syn_orig = copy.deepcopy(cad_syn_class.detach())
+                cad_syn_class = cad_syn[c*ipc:(c+1)*ipc].clone()
                 lab_syn_class = torch.ones((ipc), device=device, dtype=torch.long) * c
                 ## Shapes match expectation so far.
                 ## TODO Create loader from array for real and synthetic
@@ -249,22 +249,26 @@ if __name__ == "__main__":
                     loss_syn =  F.cross_entropy(output_syn, input_real_iter["labels"].to(device), reduction="mean")
                     loss_syn_list.append(loss_syn)                
                 loss_syn = sum(loss_syn_list)/len(loss_syn_list)
-                gw_syn = torch.autograd.grad(loss_syn, net_parameters)
-                gw_syn = list((_.detach().clone() for _ in gw_syn))
+                gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
 
                 loss += match_loss(gw_syn, gw_real, "ours", device=device)
 
             print("Loss Matching: ", loss)
-            optimizer_distill.zero_grad()
+            optimizer_distillation.zero_grad()
             loss.backward()
-            optimizer_distill.step()
+            optimizer_distillation.step()
             loss_avg += loss.item() 
+            # if ol == outer_loop - 1:
+            #     break
 
-            print(torch.nonzero(cad_syn_class-cad_syn_orig))
+            print("==== Training Distillation Network ========")
+            # cad_syn_train, label_syn_train = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
+            cad_syn_train, label_syn_train = cad_syn.clone().detach(), label_syn.clone().detach() # avoid any unaware modification
+            syn_ds = TensorDataset(cad_syn_train, label_syn_train)
+            syn_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True)
+            for il in range(inner_loop):
+                train_classifier(net_distillation, device, def_conf, syn_loader, "train", optimizer_dist_net, scheduler_dist_net)
 
-            if ol == outer_loop - 1:
-                break
-            exit()
     ## TODO Improved logging. Instead of the difficult calculation. 
 
         

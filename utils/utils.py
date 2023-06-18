@@ -44,7 +44,7 @@ def get_cad_points(path, num_points):
     return xyz.to(torch.float32)
 
 def save_cad(cad_list, config):
-    cad_list_copy = copy.deepcopy(cad_list.detach().cpu().numpy())
+    cad_list_copy = cad_list.clone().detach().cpu().numpy()
     for i, cad in enumerate(cad_list_copy):
         cad[cad<-1] = -1
         cad[cad>1] = 1
@@ -112,8 +112,8 @@ def match_loss(gw_syn, gw_real, dis_metric, device):
 
 class TensorDataset(Dataset):
     def __init__(self, cad, labels): 
-        self.cad = cad.detach()
-        self.labels = labels.detach()
+        self.cad = cad
+        self.labels = labels
 
     def __getitem__(self, index):
         label = self.labels[index]
