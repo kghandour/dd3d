@@ -264,8 +264,8 @@ if __name__ == "__main__":
             loss.backward()
             optimizer_distillation.step()
             loss_avg += loss.item()
-            # if ol == outer_loop - 1:
-            #     break
+            if ol == outer_loop - 1:
+                break
             # cad_syn_train, label_syn_train = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
             cad_syn_train, label_syn_train = cad_syn.clone().detach(), label_syn.clone().detach() # avoid any unaware modification
             syn_ds = TensorDataset(cad_syn_train, label_syn_train)
