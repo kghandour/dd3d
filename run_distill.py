@@ -258,7 +258,7 @@ if __name__ == "__main__":
                 loss_syn = sum(loss_syn_list)/len(loss_syn_list)
                 gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
 
-                loss += match_loss(gw_syn, gw_real, "mse", device=device)
+                loss += match_loss(gw_syn, gw_real, def_conf.get("loss_method"), device=device)
 
             optimizer_distillation.zero_grad()
             loss.backward()
@@ -266,6 +266,7 @@ if __name__ == "__main__":
             loss_avg += loss.item()
             if ol == outer_loop - 1:
                 break
+            print("==== Training Distillation Network =====\n")
             # cad_syn_train, label_syn_train = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
             cad_syn_train, label_syn_train = cad_syn.clone().detach(), label_syn.clone().detach() # avoid any unaware modification
             syn_ds = TensorDataset(cad_syn_train, label_syn_train)
@@ -290,7 +291,7 @@ if __name__ == "__main__":
                     "cad_syn":cad_syn.clone(),
                     "label_syn":label_syn.clone()
                 },
-                def_conf.get("distillation_model_name"),
+                def_conf.get("distillation_model_name")+def_conf.get("distillation_exp_name")+".model",
             )
 
 
