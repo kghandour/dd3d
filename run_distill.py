@@ -152,7 +152,7 @@ if __name__ == "__main__":
 
     print("========= Initializing SummaryWriter ==========")
     if(logging):
-        summary_writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),"distillation"+str(time.time()))) #initialize sumamry writer
+        summary_writer = SummaryWriter(log_dir=os.path.join(def_conf.get("log_dir"),"distillation_"+def_conf.get("distillation_exp_name")+str(time.time()))) #initialize sumamry writer
     else: summary_writer=None
 
     ''' training '''
