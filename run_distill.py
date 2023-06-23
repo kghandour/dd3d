@@ -258,7 +258,7 @@ if __name__ == "__main__":
                 loss_syn = sum(loss_syn_list)/len(loss_syn_list)
                 gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
 
-                loss += match_loss(gw_syn, gw_real, def_conf.get("loss_method"), device=device)
+                loss += match_loss(gw_syn, gw_real, def_conf.get("loss_method"), device=device)* 0.01
 
             optimizer_distillation.zero_grad()
             loss.backward()
