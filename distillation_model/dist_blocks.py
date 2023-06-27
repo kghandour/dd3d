@@ -13,7 +13,7 @@ def get_distillation_loss(
     net_parameters,
     cad_syn_tensor,
     label_syn_tensor,
-    batch_size=2
+    batch_size=4
 ):
     loss_real_list = []
     loss_syn_list = []
@@ -36,16 +36,16 @@ def get_distillation_loss(
     gw_real = list((_.detach().clone() for _ in gw_real))
 
     syn_loader = create_loader_for_synthetic_cad(cad_syn_tensor, label_syn_tensor, make_copy=False, batch_size=batch_size)
-    for input_real_iter in syn_loader:
-        input_real = create_input_batch(
-            input_real_iter,
+    for input_syn_iter in syn_loader:
+        input_syn = create_input_batch(
+            input_syn_iter,
             device=device,
             quantization_size=def_conf.getfloat("voxel_size"),
         )
-        output_syn = distillation_network(input_real)
+        output_syn = distillation_network(input_syn)
         loss_syn = F.cross_entropy(
             output_syn,
-            input_real_iter["labels"].to(device),
+            input_syn_iter["labels"].to(device),
             reduction="mean",
         )
         loss_syn_list.append(loss_syn)
@@ -71,7 +71,7 @@ def outer_block(
     distillation_network,
     net_parameters,
     optimizer_distillation,
-    batch_size=2,
+    batch_size=4,
     classes_to_distill=[],
 ):
     loss = torch.tensor(0.0).to(device)
@@ -83,7 +83,7 @@ def outer_block(
                 * class_id[c]
             )
             cad_syn_class = cad_syn_tensor[idx * ipc : (idx + 1) * ipc].clone()
-            lab_syn_class = (
+            label_syn_class = (
                 torch.ones((ipc), device=device, dtype=torch.long) * class_id[c]
             )
             input_real_ds = RealTensorDataset(cad_real_class, labels_real_class)
@@ -100,21 +100,21 @@ def outer_block(
                 def_conf=def_conf,
                 distillation_network=distillation_network,
                 net_parameters=net_parameters,
-                cad_syn_tensor=cad_syn_tensor,
-                label_syn_tensor=label_syn_tensor,
+                cad_syn_tensor=cad_syn_class,
+                label_syn_tensor=label_syn_class,
                 batch_size=batch_size
             )
     else:
         for c in range(num_classes):
             cad_real_class = get_rand_cad(c, 4, indices_class, cad_all_path)
-            lab_real_class = (
+            labels_real_class = (
                 torch.ones(
                     (cad_real_class.shape[0],), device=device, dtype=torch.long
                 )
                 * c
             )
             cad_syn_class = cad_syn_tensor[c * ipc : (c + 1) * ipc].clone()
-            lab_syn_class = torch.ones((ipc), device=device, dtype=torch.long) * c
+            label_syn_class = torch.ones((ipc), device=device, dtype=torch.long) * c
             input_real_ds = RealTensorDataset(cad_real_class, labels_real_class)
             input_real_loader = torch.utils.data.DataLoader(
                 input_real_ds,
@@ -129,8 +129,8 @@ def outer_block(
                 def_conf=def_conf,
                 distillation_network=distillation_network,
                 net_parameters=net_parameters,
-                cad_syn_tensor=cad_syn_tensor,
-                label_syn_tensor=label_syn_tensor,
+                cad_syn_tensor=cad_syn_class,
+                label_syn_tensor=label_syn_class,
             )
     optimizer_distillation.zero_grad()
     loss.backward()

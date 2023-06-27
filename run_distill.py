@@ -71,7 +71,7 @@ if __name__ == "__main__":
     if not os.path.exists(distillation_out_path):
         os.mkdir(distillation_out_path)
 
-    batch_size = def_conf.getint("batch_size")
+    batch_size = def_conf.getint("batch_size", 4)
     if def_conf.getboolean("overfit_1"):
         batch_size = 1
 
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         classification_mode=def_conf.get("classification_mode"),
     ).to(device)
     net_distillation.load_state_dict(loaded_classification_dict["state_dict"])
-    net_distillation.train()
+    net_distillation.eval()
 
     print("%s training begins" % get_time())
 
@@ -177,6 +177,7 @@ if __name__ == "__main__":
             logging=logging,
             summary_writer=summary_writer,
             device=device,
+            batch_size=batch_size
         )
 
         """Save point cloud"""

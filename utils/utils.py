@@ -270,12 +270,10 @@ def initalize_synthetic_tensors(
     return cad_syn, label_syn
 
 
-def create_loader_for_synthetic_cad(cad_syn_tensor, label_syn_tensor, make_copy=True, batch_size=1):
+def create_loader_for_synthetic_cad(cad_syn_tensor, label_syn_tensor, make_copy=True, batch_size=4):
     if(make_copy):
-        cad_syn_eval_tensor, label_syn_eval_tensor = (
-            cad_syn_tensor.clone().detach(),
-            label_syn_tensor.clone().detach(),
-        )  # avoid any unaware modification
+        cad_syn_eval_tensor, label_syn_eval_tensor = cad_syn_tensor.clone().detach(), label_syn_tensor.clone().detach()
+
     else:
         cad_syn_eval_tensor = cad_syn_tensor
         label_syn_eval_tensor = label_syn_tensor

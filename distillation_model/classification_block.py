@@ -18,6 +18,7 @@ def run_epoch(network, optimizer, scheduler, phase, dataloader, config, device):
     else:
         network.eval()
     loss_avg, acc_avg, num_exp = 0, 0, 0
+
     for train_iter in dataloader:
         input = create_input_batch(
             train_iter, device=device, quantization_size=config.getfloat("voxel_size")
@@ -57,6 +58,7 @@ def evaluate_classification(
     label_syn_tensor,
     validation_loader,
     device,
+    batch_size = 4
 ):
     print("====== Testing Classifier =========")
     for it_eval in range(config.getint("num_eval")):
@@ -64,7 +66,7 @@ def evaluate_classification(
             cad_syn_tensor=cad_syn_tensor,
             label_syn_tensor=label_syn_tensor,
             make_copy=True,
-            batch_size=2,
+            batch_size=batch_size,
         )
 
         metrics_dict = {
@@ -130,7 +132,8 @@ def classification_evaluation_block(
     val_loader,
     logging,
     summary_writer,
-    device
+    device,
+    batch_size=4,
 ):
     if iteration in eval_iteration_pool:
         classification_metrics_dict = {}
@@ -152,6 +155,7 @@ def classification_evaluation_block(
                 label_syn_tensor=label_syn_tensor,
                 validation_loader=val_loader,
                 device=device,
+                batch_size=batch_size
             )
             ## Simply append the losses returned from the classification eval
             classification_metrics_dict = populate_classification_metrics_dict(
