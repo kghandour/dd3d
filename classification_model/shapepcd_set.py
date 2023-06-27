@@ -35,29 +35,47 @@ class ShapeNetPCD(Dataset):
             config,
             transform = None,
             num_points = 2048,
-            for_distillation = False
+            for_distillation = False,
+            cls_list = []
         ) -> None:
         Dataset.__init__(self)
         classification_mode = config.get("classification_mode")
-        cls_name = config.get("binary_class_name")
+        if(config.get("binary_class_name") is not None):
+            cls_name = config.get("binary_class_name")
         self.phase = "val" if phase in ["val", "test"] else "train"
-        self.data, self.label = self.load_data(data_root, classification_mode, cls_name, for_distillation)
+        self.data, self.label = self.load_data(data_root, classification_mode, cls_name, for_distillation, cls_list)
         self.transform = transform
         self.num_points = num_points
         self.classification_mode = classification_mode
 
-    def load_data(self, data_root, classification_mode, cls_name=None, for_distillation=False):
+    def load_data(self, data_root, classification_mode, cls_name=None, for_distillation=False, cls_list=[]):
         data, labels = [], []
         assert os.path.exists(data_root), f"{data_root} does not exist"
         if(cls_name is not None):
             target_class_dir = os.path.join(data_root,cls_name)
 
+        ## Do you want a certain list of classes (Mainly used in distillation)
+        if(len(cls_list)>0):
+            for class_name in cls_list:
+                if self.phase == "train":
+                    for model in TRAIN_DICT[class_name]:
+                        labels.append(class_id[class_name])
+                        data.append(model)
+                else:
+                    for model in VAL_DICT[class_name]:
+                        labels.append(class_id[class_name])
+                        data.append(model)
+            return np.asarray(data), torch.from_numpy(np.asarray(labels)).type(torch.LongTensor)
+        
+        ## Do you want to retrieve a training set?
         if(self.phase == "train"):
+            ## Are you trying to retrieve all classes?
             if(classification_mode == "multi"):
                 for key in TRAIN_DICT.keys():
                     for model in TRAIN_DICT[key]:
                         labels.append(class_id[key])
                         data.append(model)
+            ## Or are you trying to retrieve just one? (Mainly used for classification training)
             else:
                 for model in TRAIN_DICT[cls_name]:
                     labels.append(1)
@@ -68,7 +86,9 @@ class ShapeNetPCD(Dataset):
                             labels.append(0)
                             data.append(model)
 
+        ## Do you want to retrieve a validation set?
         if(self.phase =="val"):
+            ## Are you trying to retrieve all classes?
             if(classification_mode == "multi"):
                 for key in VAL_DICT.keys():
                     if(for_distillation):
@@ -79,6 +99,7 @@ class ShapeNetPCD(Dataset):
                         for model in VAL_DICT[key]:
                             labels.append(class_id[key])
                             data.append(model)
+            ## Or are you trying to retrieve just one? (Mainly used for classification training)
             else:
                 for model in VAL_DICT[cls_name]:
                     labels.append(1)
