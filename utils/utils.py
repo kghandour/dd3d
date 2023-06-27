@@ -241,7 +241,7 @@ def create_val_loader_and_list(def_conf, classes_to_distill):
         val_set, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True
     )
 
-    return cad_all_path, labels_all, val_loader
+    return np.array(cad_all_path), torch.from_numpy(np.array(labels_all)).type(torch.LongTensor), val_loader
 
 
 ## TODO: Add REAL Initialization.
@@ -285,7 +285,7 @@ def create_loader_for_synthetic_cad(cad_syn_tensor, label_syn_tensor, make_copy=
         syn_ds,
         batch_size=batch_size,
         collate_fn=minkowski_collate_fn,
-        drop_last=True,
+        drop_last=False,
     )
     return syn_loader
 

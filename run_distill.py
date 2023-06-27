@@ -6,6 +6,7 @@ from classification_model.augmentation import (
 )
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
 from distillation_model.classification_block import classification_evaluation_block
+from distillation_model.dist_blocks import outer_block
 from utils.utils import (
     RealTensorDataset,
     create_val_loader_and_list,
@@ -34,75 +35,6 @@ import time
 import argparse
 from distillation_model.dist_network import MinkowskiDistill
 import torch.nn.functional as F
-
-
-def evaluate_synset(it, iteration, net, syn_ds, val_loader, config, device):
-    time_start = time.time()
-
-    epoch_eval_train = config.getint("epoch_eval_train")
-    loss_train, acc_train = 0, 0
-    for ep in range(epoch_eval_train + 1):
-        loss_train, acc_train = train_classifier(
-            net, device, config, syn_ds, "val", optimizer_model, scheduler_model
-        )
-    time_train = time.time() - time_start
-    loss_val, acc_val = train_classifier(
-        net, device, config, val_loader, "val", optimizer_model, scheduler_model
-    )
-    print(
-        "%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f"
-        % (
-            get_time(),
-            it_eval,
-            epoch_eval_train,
-            int(time_train),
-            loss_train,
-            acc_train,
-            acc_val,
-        )
-    )
-    return acc_train, acc_val, time_train, loss_train, loss_val
-
-
-def train_classifier(net, device, config, loader, phase, optimizer, scheduler):
-    if phase == "train":
-        net.train()
-    else:
-        net.eval()
-
-    loss_avg, acc_avg, num_exp = 0, 0, 0
-
-    for train_iter in loader:
-        input = create_input_batch(
-            train_iter, device=device, quantization_size=config.getfloat("voxel_size")
-        )
-        # print("Input batch shape for classifier ", input.shape)
-        logit = net(input)
-        # print("Network Classifier output shape ", logit.shape, "Label output shape", train_iter["labels"].shape)
-        loss = criterion(
-            logit, train_iter["labels"].to(device), config.get("classification_mode")
-        )
-        accuracy = metrics.accuracy_score(
-            train_iter["labels"].cpu(), torch.argmax(logit, 1).cpu()
-        )
-
-        if phase == "train":
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-
-        torch.cuda.empty_cache()
-
-        loss_avg += loss.item()
-        acc_avg += accuracy
-        num_exp += 1
-
-    loss_avg /= num_exp
-    acc_avg /= num_exp
-
-    return loss_avg, acc_avg
-
 
 if __name__ == "__main__":
     print("=======Distillation========")
@@ -216,9 +148,20 @@ if __name__ == "__main__":
     optimizer_classification.load_state_dict(loaded_classification_dict["optimizer"])
     scheduler_classification.load_state_dict(loaded_classification_dict["scheduler"])
 
-    print("%s training begins" % get_time())
-    for it in range(total_iterations):
+    ## Initialize and load weights for PRETRAINED DISTILLATION NETWORK
+    net_distillation = MinkowskiFCNN(
+        in_channel=3,
+        out_channel=num_classes,
+        embedding_channel=1024,
+        classification_mode=def_conf.get("classification_mode"),
+    ).to(device)
+    net_distillation.load_state_dict(loaded_classification_dict["state_dict"])
+    net_distillation.train()
 
+    print("%s training begins" % get_time())
+
+    ## Start Loop Here
+    for it in range(total_iterations):
         ## Classification Evaluation Blocks compares the classifier performance on the synthetic and validation set
         classification_evaluation_block(
             iteration=it,
@@ -233,7 +176,7 @@ if __name__ == "__main__":
             val_loader=val_loader,
             logging=logging,
             summary_writer=summary_writer,
-            device=device
+            device=device,
         )
 
         """Save point cloud"""
@@ -243,15 +186,8 @@ if __name__ == "__main__":
                 cad_syn_tensor, def_conf, directory=distillation_out_path, iteration=it
             )
 
-        ## END REFACTOR
-        net_distillation = MinkowskiFCNN(
-            in_channel=3,
-            out_channel=num_classes,
-            embedding_channel=1024,
-            classification_mode=def_conf.get("classification_mode"),
-        ).to(device)
-        net_distillation.load_state_dict(loaded_classification_dict["state_dict"])
-        net_distillation.eval()
+        ## END REFACTOR phase 1
+        ## Start Refactor phase 2
         net_parameters = list(net_distillation.parameters())
 
         optimizer_dist_net = optim.SGD(
@@ -260,6 +196,7 @@ if __name__ == "__main__":
             momentum=0.9,
             weight_decay=def_conf.getfloat("weight_decay_distillation"),
         )
+
         scheduler_dist_net = optim.lr_scheduler.CosineAnnealingLR(
             optimizer_dist_net,
             T_max=def_conf.getint("max_steps"),
@@ -268,80 +205,23 @@ if __name__ == "__main__":
         loss_avg = 0
 
         for ol in range(outer_loop):
-            loss = torch.tensor(0.0).to(device)
-            for c in range(num_classes):
-                cad_real_class = get_rand_cad(c, 4, indices_class, cad_all_path)
-                lab_real_class = (
-                    torch.ones(
-                        (cad_real_class.shape[0],), device=device, dtype=torch.long
-                    )
-                    * c
-                )
-                cad_syn_class = cad_syn[c * ipc : (c + 1) * ipc].clone()
-                lab_syn_class = torch.ones((ipc), device=device, dtype=torch.long) * c
-                ## Shapes match expectation so far.
-                ## TODO Create loader from array for real and synthetic
-                input_real_ds = RealTensorDataset(cad_real_class, lab_real_class)
-                input_real_loader = torch.utils.data.DataLoader(
-                    input_real_ds,
-                    batch_size=4,
-                    collate_fn=minkowski_collate_fn,
-                    drop_last=True,
-                )
-                loss_real_list = []
-                loss_syn_list = []
-                for input_real_iter in input_real_loader:
-                    input_real = create_input_batch(
-                        input_real_iter,
-                        device=device,
-                        quantization_size=def_conf.getfloat("voxel_size"),
-                    )
-                    output_real = net_distillation(input_real)
-                    loss_real = F.cross_entropy(
-                        output_real,
-                        input_real_iter["labels"].to(device),
-                        reduction="mean",
-                    )
-                    loss_real_list.append(loss_real)
-                loss_real = sum(loss_real_list) / len(loss_real_list)
-                gw_real = torch.autograd.grad(loss_real, net_parameters)
-                gw_real = list((_.detach().clone() for _ in gw_real))
-
-                syn_ds = TensorDataset(cad_syn_class, lab_syn_class)
-                syn_loader = torch.utils.data.DataLoader(
-                    syn_ds,
-                    batch_size=4,
-                    collate_fn=minkowski_collate_fn,
-                    drop_last=False,
-                )
-                for input_real_iter in syn_loader:
-                    input_real = create_input_batch(
-                        input_real_iter,
-                        device=device,
-                        quantization_size=def_conf.getfloat("voxel_size"),
-                    )
-                    output_syn = net_distillation(input_real)
-                    loss_syn = F.cross_entropy(
-                        output_syn,
-                        input_real_iter["labels"].to(device),
-                        reduction="mean",
-                    )
-                    loss_syn_list.append(loss_syn)
-                loss_syn = sum(loss_syn_list) / len(loss_syn_list)
-                gw_syn = torch.autograd.grad(
-                    loss_syn, net_parameters, create_graph=True
-                )
-
-                loss += match_loss(
-                    gw_syn, gw_real, def_conf.get("loss_method"), device=device
-                )
-
-            optimizer_distillation.zero_grad()
-            loss.backward()
-            optimizer_distillation.step()
-            loss_avg += loss.item()
+            loss_avg += outer_block(
+                num_classes=num_classes,
+                indices_class=indices_class,
+                cad_all_path=cad_all_path,
+                device=device,
+                cad_syn_tensor=cad_syn_tensor,
+                label_syn_tensor=label_syn_tensor,
+                ipc=ipc,
+                def_conf=def_conf,
+                distillation_network=net_distillation,
+                net_parameters=net_parameters,
+                optimizer_distillation=optimizer_distillation,
+                classes_to_distill=classes_to_distill,
+            )
             if ol == outer_loop - 1:
                 break
+            ## END REFACTOR PHASE 2
             print("==== Training Distillation Network =====\n")
             # cad_syn_train, label_syn_train = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
             cad_syn_train, label_syn_train = (
@@ -378,8 +258,8 @@ if __name__ == "__main__":
                     "optimizer_distillation": optimizer_distillation.state_dict(),
                     "scheduler": scheduler_dist_net.state_dict(),
                     "curr_iter": it,
-                    "cad_syn": cad_syn.clone(),
-                    "label_syn": label_syn.clone(),
+                    "cad_syn": cad_syn_tensor.clone(),
+                    "label_syn": label_syn_tensor.clone(),
                 },
                 def_conf.get("distillation_model_name")
                 + def_conf.get("distillation_exp_name")
