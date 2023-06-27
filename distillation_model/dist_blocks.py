@@ -4,7 +4,12 @@ import torch
 from classification_model.me_classification import create_input_batch
 from classification_model.me_network import criterion
 from classification_model.shapepcd_set import minkowski_collate_fn
-from utils.utils import create_loader_for_synthetic_cad, get_time
+from utils.utils import (
+    create_loader_for_synthetic_cad,
+    get_time,
+    log_classification_metrics_and_reset,
+    populate_classification_metrics_dict,
+)
 
 
 def run_epoch(network, optimizer, scheduler, phase, dataloader, config, device):
@@ -59,7 +64,7 @@ def evaluate_classification(
             cad_syn_tensor=cad_syn_tensor,
             label_syn_tensor=label_syn_tensor,
             make_copy=True,
-            batch_size=2
+            batch_size=2,
         )
 
         metrics_dict = {
@@ -111,3 +116,53 @@ def evaluate_classification(
         )
 
         return metrics_dict
+
+def classification_evaluation_block(
+    iteration,
+    eval_iteration_pool,
+    model_eval_pool,
+    net_classification,
+    optimizer_classification,
+    scheduler_classification,
+    def_conf,
+    cad_syn_tensor,
+    label_syn_tensor,
+    val_loader,
+    logging,
+    summary_writer,
+    device
+):
+    if iteration in eval_iteration_pool:
+        classification_metrics_dict = {}
+        classification_metrics_dict["log_acc_train"] = []
+        classification_metrics_dict["log_acc_test"] = []
+        classification_metrics_dict["log_time_train"] = []
+        classification_metrics_dict["log_loss_train"] = []
+        classification_metrics_dict["log_loss_val"] = []
+        ## TODO find other possible evaluation models
+        for model_eval in model_eval_pool:
+            accs_train = []
+            ## TODO: Check for the num_evals good value.
+            classification_metrics_dict_single_eval_model = evaluate_classification(
+                network=net_classification,
+                optimizer=optimizer_classification,
+                scheduler=scheduler_classification,
+                config=def_conf,
+                cad_syn_tensor=cad_syn_tensor,
+                label_syn_tensor=label_syn_tensor,
+                validation_loader=val_loader,
+                device=device,
+            )
+            ## Simply append the losses returned from the classification eval
+            classification_metrics_dict = populate_classification_metrics_dict(
+                classification_metrics_dict,
+                classification_metrics_dict_single_eval_model,
+            )
+        ## Write the metrics to the logger and reset the dictionary
+        classification_metrics_dict = log_classification_metrics_and_reset(
+            logging,
+            summary_writer,
+            classification_metrics_dict,
+            iteration=iteration,
+        )
+

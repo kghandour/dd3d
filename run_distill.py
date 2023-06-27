@@ -5,7 +5,7 @@ from classification_model.augmentation import (
     CoordinateTranslation,
 )
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
-from distillation_model.dist_blocks import evaluate_classification
+from distillation_model.dist_blocks import classification_evaluation_block
 from utils.utils import (
     RealTensorDataset,
     create_val_loader_and_list,
@@ -218,37 +218,30 @@ if __name__ == "__main__":
 
     print("%s training begins" % get_time())
     for it in range(total_iterations):
-        if it in eval_iteration_pool:
-            classification_metrics_dict = {}
-            classification_metrics_dict["log_acc_train"]=[]
-            classification_metrics_dict["log_acc_test"]=[]
-            classification_metrics_dict["log_time_train"]=[]
-            classification_metrics_dict["log_loss_train"]=[]
-            classification_metrics_dict["log_loss_val"]=[]
-            ## TODO find other possible evaluation models
-            for model_eval in model_eval_pool:
-                accs_train = []
-                ## TODO: Check for the num_evals good value.
-                classification_metrics_dict_single_eval_model = evaluate_classification(
-                    network=net_classification,
-                    optimizer=optimizer_classification,
-                    scheduler=scheduler_classification,
-                    config=def_conf,
-                    cad_syn_tensor=cad_syn_tensor,
-                    label_syn_tensor=label_syn_tensor,
-                    validation_loader=val_loader,
-                    device=device
-                )
-                ## Simply append the losses returned from the classification eval
-                classification_metrics_dict = populate_classification_metrics_dict(classification_metrics_dict, classification_metrics_dict_single_eval_model)
-            ## Write the metrics to the logger and reset the dictionary
-            classification_metrics_dict = log_classification_metrics_and_reset(logging, summary_writer, classification_metrics_dict, it)
+
+        ## Classification Evaluation Blocks compares the classifier performance on the synthetic and validation set
+        classification_evaluation_block(
+            iteration=it,
+            eval_iteration_pool=eval_iteration_pool,
+            model_eval_pool=model_eval_pool,
+            net_classification=net_classification,
+            optimizer_classification=optimizer_classification,
+            scheduler_classification=scheduler_classification,
+            def_conf=def_conf,
+            cad_syn_tensor=cad_syn_tensor,
+            label_syn_tensor=label_syn_tensor,
+            val_loader=val_loader,
+            logging=logging,
+            summary_writer=summary_writer,
+            device=device
+        )
 
         """Save point cloud"""
         if (it % def_conf.getint("save_cad_and_eval_every")) == 0:
             print("====== Exporting Point Clouds ======")
-            save_cad(cad_syn_tensor, def_conf, directory=distillation_out_path, iteration=it)
-
+            save_cad(
+                cad_syn_tensor, def_conf, directory=distillation_out_path, iteration=it
+            )
 
         ## END REFACTOR
         net_distillation = MinkowskiFCNN(
