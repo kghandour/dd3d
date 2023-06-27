@@ -38,7 +38,7 @@ def evaluate_synset(it, iteration, net, syn_ds, val_loader, config, checkpoint_l
     loss_train, acc_train = 0, 0
     ## TODO: Initial randomly init synth heavily modifies the classifier network. Reduced Epochs to 1 from 10 to reduce impact.
     for ep in range(epoch_eval_train+1):
-        loss_train, acc_train = train_classifier(net, device, config, syn_ds, "train", optimizer_model, scheduler_model)
+        loss_train, acc_train = train_classifier(net, device, config, syn_ds, "val", optimizer_model, scheduler_model)
     time_train = time.time() - time_start
     loss_val, acc_val = train_classifier(net, device, config, val_loader, "val", optimizer_model, scheduler_model)
     print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, epoch_eval_train, int(time_train), loss_train, acc_train, acc_val))
@@ -102,8 +102,8 @@ if __name__ == "__main__":
     num_points = def_conf.getint("num_points", 2048) ## Number of points
     load_model_path = def_conf.get("load_model")
     loaded_dict = torch.load(load_model_path)
-    if not os.path.exists(def_conf.get("save_path")):
-        os.mkdir(def_conf.get("save_path"))
+    if not os.path.exists(os.path.join(def_conf.get("save_path"), def_conf.get("distillation_exp_name"))):
+        os.mkdir(os.path.join(def_conf.get("save_path"), def_conf.get("distillation_exp_name")))
 
     batch_size = def_conf.getint("batch_size")
     if(def_conf.getboolean("overfit_1")): batch_size = 1
@@ -157,6 +157,10 @@ if __name__ == "__main__":
 
     ''' training '''
     optimizer_distillation = torch.optim.SGD([cad_syn, ], lr=def_conf.getfloat("lr_cad", 0.1), momentum=0.5) # optimizer_img for synthetic data
+    scheduler_distillation = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer_distillation,
+        T_max=def_conf.getint("max_steps")
+    )
     optimizer_distillation.zero_grad()
     # criterion = nn.CrossEntropyLoss().to(device)
 
@@ -204,9 +208,11 @@ if __name__ == "__main__":
             save_cad(cad_syn, def_conf, it)
 
 
-        # net_distillation = MinkowskiFCNN(in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("overfit_1")).to(device)
-        net_distillation = MinkowskiDistill(in_channel=3, out_channel=num_classes, embedding_channel=256, num_points=num_points).to(device)
-        net_distillation.train()
+        net_distillation = MinkowskiFCNN(
+                    in_channel=3, out_channel=num_classes, embedding_channel=1024, classification_mode=def_conf.get("classification_mode")
+                ).to(device)
+        net_distillation.load_state_dict(loaded_dict['state_dict'])
+        net_distillation.eval()
         net_parameters = list(net_distillation.parameters())
     
         optimizer_dist_net = optim.SGD(
@@ -258,7 +264,7 @@ if __name__ == "__main__":
                 loss_syn = sum(loss_syn_list)/len(loss_syn_list)
                 gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
 
-                loss += match_loss(gw_syn, gw_real, def_conf.get("loss_method"), device=device)* 0.01
+                loss += match_loss(gw_syn, gw_real, def_conf.get("loss_method"), device=device)
 
             optimizer_distillation.zero_grad()
             loss.backward()

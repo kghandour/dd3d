@@ -53,7 +53,7 @@ def save_cad(cad_list, config, iteration):
         pcd.points = o3d.utility.Vector3dVector(np.asarray(cad))
         ipc = config.getint("n_cad_per_class", 1)
         name = get_class_name_from_id(i//ipc)
-        o3d.io.write_point_cloud(config.get("save_path")+name+"_"+str(iteration)+".ply", pcd)
+        o3d.io.write_point_cloud(os.path.join(config.get("save_path"), config.get("distillation_exp_name"))+"/"+name+"_"+str(iteration)+".ply", pcd)
 
 def distance_wb(gwr, gws):
     shape = gwr.shape
