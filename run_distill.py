@@ -5,7 +5,7 @@ from classification_model.augmentation import (
     CoordinateTranslation,
 )
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
-from distillation_model.dist_blocks import classification_evaluation_block
+from distillation_model.classification_block import classification_evaluation_block
 from utils.utils import (
     RealTensorDataset,
     create_val_loader_and_list,
