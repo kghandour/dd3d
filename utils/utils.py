@@ -238,7 +238,7 @@ def create_val_loader_and_list(def_conf, classes_to_distill):
         cls_list=classes_to_distill,
     )
     val_loader = torch.utils.data.DataLoader(
-        val_set, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True
+        val_set, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True, shuffle=True
     )
 
     return np.array(cad_all_path), torch.from_numpy(np.array(labels_all)).type(torch.LongTensor), val_loader

@@ -1,14 +1,19 @@
 from sklearn import metrics
 import torch
+from tqdm import tqdm
 from classification_model.augmentation import (
     CoordinateTransformation,
     CoordinateTranslation,
 )
 from classification_model.shapepcd_set import ShapeNetPCD, minkowski_collate_fn
-from distillation_model.classification_block import classification_evaluation_block
+from distillation_model.classification_block import (
+    classification_evaluation_block,
+    run_epoch,
+)
 from distillation_model.dist_blocks import outer_block
 from utils.utils import (
     RealTensorDataset,
+    create_loader_for_synthetic_cad,
     create_val_loader_and_list,
     get_loops,
     get_rand_cad,
@@ -116,7 +121,14 @@ if __name__ == "__main__":
 
     ## Initializing Optimizer for the synthetic CAD.
     ## I tried SGD. maybe try ADAM
-    ## TODO: Try ADAM
+    # optimizer_distillation = torch.optim.Adam(
+    #     [
+    #         cad_syn_tensor,
+    #     ],
+    #     lr=def_conf.getfloat("lr_cad", 0.1),
+    #     betas=[0.9, 0.99],
+    # )
+
     optimizer_distillation = torch.optim.SGD(
         [
             cad_syn_tensor,
@@ -149,14 +161,20 @@ if __name__ == "__main__":
     scheduler_classification.load_state_dict(loaded_classification_dict["scheduler"])
 
     ## Initialize and load weights for PRETRAINED DISTILLATION NETWORK
-    net_distillation = MinkowskiFCNN(
+    # net_distillation = MinkowskiFCNN(
+    #     in_channel=3,
+    #     out_channel=num_classes,
+    #     embedding_channel=1024,
+    #     classification_mode=def_conf.get("classification_mode"),
+    # ).to(device)
+    # net_distillation.load_state_dict(loaded_classification_dict["state_dict"])
+    # net_distillation.eval()
+
+    net_distillation = MinkowskiDistill(
         in_channel=3,
-        out_channel=num_classes,
-        embedding_channel=1024,
-        classification_mode=def_conf.get("classification_mode"),
+        out_channel=55,
+        embedding_channel=256,
     ).to(device)
-    net_distillation.load_state_dict(loaded_classification_dict["state_dict"])
-    net_distillation.eval()
 
     print("%s training begins" % get_time())
 
@@ -177,7 +195,7 @@ if __name__ == "__main__":
             logging=logging,
             summary_writer=summary_writer,
             device=device,
-            batch_size=batch_size
+            batch_size=batch_size,
         )
 
         """Save point cloud"""
@@ -204,8 +222,8 @@ if __name__ == "__main__":
         )
         optimizer_dist_net.zero_grad()
         loss_avg = 0
-
-        for ol in range(outer_loop):
+        dist_net_loss_list, dist_net_acc_list = [], []
+        for ol in tqdm(range(outer_loop), desc="Outer Loop"):
             loss_avg += outer_block(
                 num_classes=num_classes,
                 indices_class=indices_class,
@@ -223,27 +241,25 @@ if __name__ == "__main__":
             if ol == outer_loop - 1:
                 break
             ## END REFACTOR PHASE 2
-            print("==== Training Distillation Network =====\n")
-            # cad_syn_train, label_syn_train = copy.deepcopy(cad_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
-            cad_syn_train, label_syn_train = (
-                cad_syn.clone().detach(),
-                label_syn.clone().detach(),
-            )  # avoid any unaware modification
-            syn_ds = TensorDataset(cad_syn_train, label_syn_train)
-            syn_loader = torch.utils.data.DataLoader(
-                syn_ds, batch_size=4, collate_fn=minkowski_collate_fn, drop_last=True
+            syn_loader = create_loader_for_synthetic_cad(
+                cad_syn_tensor=cad_syn_tensor, label_syn_tensor=label_syn_tensor
             )
+            dist_net_loss_list, dist_net_acc_list = [], []
             for il in range(inner_loop):
-                train_classifier(
-                    net_distillation,
-                    device,
-                    def_conf,
-                    syn_loader,
-                    "train",
-                    optimizer_dist_net,
-                    scheduler_dist_net,
+                distilliation_net_loss, distilliation_net_acc = run_epoch(
+                    network=net_distillation,
+                    optimizer=optimizer_dist_net,
+                    scheduler=scheduler_dist_net,
+                    phase="train",
+                    dataloader=syn_loader,
+                    config=def_conf,
+                    device=device,
                 )
-
+                dist_net_loss_list.append(distilliation_net_loss)
+                dist_net_acc_list.append(distilliation_net_acc)
+        if(logging and len(dist_net_loss_list)> 0):
+            summary_writer.add_scalar("Distillation Network/Loss", list_average(dist_net_loss_list), it)
+            summary_writer.add_scalar("Distillation Network/Accuracy", list_average(dist_net_acc_list), it)
         loss_avg /= num_classes * outer_loop
 
         if it % 10 == 0:
