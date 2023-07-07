@@ -30,7 +30,7 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         self.classifier = nn.Sequential(
             ME.MinkowskiLinear(embedding_channel * 2, 512, bias=False),
             # ME.MinkowskiBatchNorm(512),
-            ME.MinkowskiSigmoid(),
+            ME.MinkowskiTanh(),
             ME.MinkowskiDropout(),
             ME.MinkowskiLinear(512, out_channel, bias=True),
         )
@@ -44,7 +44,7 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         return nn.Sequential(
             ME.MinkowskiLinear(in_channel, out_channel, bias=False),
             # ME.MinkowskiBatchNorm(out_channel),
-            ME.MinkowskiSigmoid(),
+            ME.MinkowskiTanh(),
         )
 
     def network_initialization(
@@ -69,7 +69,7 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
                 dimension=self.D,
             ),
             # ME.MinkowskiBatchNorm(channels[d+1]),
-            ME.MinkowskiSigmoid(),
+            ME.MinkowskiTanh(),
             ME.MinkowskiMaxPooling(kernel_size=3, stride=2, dimension=D)
             )
             in_channel = channels[d+1]
