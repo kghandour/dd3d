@@ -9,30 +9,24 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         self,
         in_channel,
         out_channel,
-        embedding_channel=256,
-        channels=(64, 128, 256, 512),
+        embedding_channel=128,
+        channels=(1024, 512,256, 128),
         D=3,
         num_points = 2048,
         net_depth = 3
     ):
         ME.MinkowskiNetwork.__init__(self, D)
         self.FC = self.FCLayer(in_channel=in_channel, out_channel=channels[0])
-        self.features, shape_feat = self.network_initialization(
+        self.features = self.network_initialization(
             channels[0],
             channels=channels,
-            embedding_channel=embedding_channel,
-            kernel_size=3,
+            kernel_size=2,
             D=D,
             num_points=num_points,
             net_depth=net_depth
         )
-        num_feat = shape_feat[0]*shape_feat[1]
         self.classifier = nn.Sequential(
-            ME.MinkowskiLinear(embedding_channel * 2, 512, bias=False),
-            # ME.MinkowskiBatchNorm(512),
-            ME.MinkowskiTanh(),
-            ME.MinkowskiDropout(),
-            ME.MinkowskiLinear(512, out_channel, bias=True),
+            ME.MinkowskiLinear(128, out_channel, bias=False),
         )
         self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
         self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
@@ -43,40 +37,35 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
     def FCLayer(self, in_channel, out_channel):
         return nn.Sequential(
             ME.MinkowskiLinear(in_channel, out_channel, bias=False),
-            # ME.MinkowskiBatchNorm(out_channel),
-            ME.MinkowskiTanh(),
+            ME.MinkowskiLeakyReLU(),
         )
 
     def network_initialization(
         self,
         in_channel,
         channels,
-        embedding_channel,
         kernel_size,
         D=3,
         num_points = 2048,
         net_depth=3
     ):
-        shape_feat = [in_channel, num_points]
+        # shape_feat = [in_channel, num_points]
         layers = []
         for d in range(net_depth):
             layers += nn.Sequential(
-            ME.MinkowskiConvolution(
-                in_channel,
-                channels[d+1],
-                kernel_size=kernel_size,
-                stride=1,
-                dimension=self.D,
-            ),
-            # ME.MinkowskiBatchNorm(channels[d+1]),
-            ME.MinkowskiTanh(),
-            ME.MinkowskiMaxPooling(kernel_size=3, stride=2, dimension=D)
+                ME.MinkowskiConvolution(
+                    in_channel,
+                    channels[d+1],
+                    kernel_size=kernel_size,
+                    stride=1,
+                    dimension=self.D,
+                ),
+                ME.MinkowskiLeakyReLU(),
+                ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension=D)
             )
             in_channel = channels[d+1]
-            shape_feat[0] = channels[d+1]
-            shape_feat[1] //= 2
         
-        return nn.Sequential(*layers), shape_feat
+        return nn.Sequential(*layers)
             
             
     def weight_initialization(self):
@@ -88,10 +77,14 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
                 nn.init.constant_(m.bn.weight, 1)
                 nn.init.constant_(m.bn.bias, 0)
 
+            if isinstance(m, ME.MinkowskiInstanceNorm):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
     def forward(self, x: ME.TensorField):
         out = self.FC(x)
         out = out.sparse()
         out = self.features(out)
-        x1 = self.global_max_pool(out)
+        x1 = self.global_avg_pool(out)
         out = self.classifier(x1).F
         return out

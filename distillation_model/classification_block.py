@@ -35,7 +35,8 @@ def run_epoch(network, optimizer, scheduler, phase, dataloader, config, device):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            if(scheduler is not None):
+                scheduler.step()
 
         torch.cuda.empty_cache()
 
@@ -117,7 +118,7 @@ def evaluate_classification(
             )
         )
 
-        return metrics_dict
+    return metrics_dict
 
 def classification_evaluation_block(
     iteration,

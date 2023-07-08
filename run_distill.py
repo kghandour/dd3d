@@ -62,9 +62,7 @@ if __name__ == "__main__":
         ipc
     )  ## Variable defines the number of models per class
     total_iterations = def_conf.getint("total_iterations")
-    eval_iteration_pool = np.arange(
-        0, total_iterations + 1, def_conf.getint("save_cad_and_eval_every")
-    ).tolist()
+    eval_iteration_pool = [total_iterations-1]
     num_points = def_conf.getint("num_points", 2048)  ## Number of points
     load_classification_model_path = def_conf.get("load_model")
     loaded_classification_dict = torch.load(load_classification_model_path)
@@ -173,13 +171,14 @@ if __name__ == "__main__":
     net_distillation = MinkowskiDistill(
         in_channel=3,
         out_channel=55,
-        embedding_channel=256,
     ).to(device)
+
+    print(net_distillation)
 
     print("%s training begins" % get_time())
 
     ## Start Loop Here
-    for it in range(total_iterations):
+    for it in tqdm(range(total_iterations), desc="Iterations: "):
         ## Classification Evaluation Blocks compares the classifier performance on the synthetic and validation set
         classification_evaluation_block(
             iteration=it,
@@ -215,15 +214,12 @@ if __name__ == "__main__":
             momentum=0.9,
             weight_decay=def_conf.getfloat("weight_decay_distillation"),
         )
-
-        scheduler_dist_net = optim.lr_scheduler.CosineAnnealingLR(
-            optimizer_dist_net,
-            T_max=def_conf.getint("max_steps"),
-        )
         optimizer_dist_net.zero_grad()
+        scheduler_dist_net = None
+
         loss_avg = 0
         dist_net_loss_list, dist_net_acc_list = [], []
-        for ol in tqdm(range(outer_loop), desc="Outer Loop"):
+        for ol in range(outer_loop):
             loss_avg += outer_block(
                 num_classes=num_classes,
                 indices_class=indices_class,
@@ -273,7 +269,6 @@ if __name__ == "__main__":
                     "dist_state": net_distillation.state_dict(),
                     "optimizer_dist_net": optimizer_dist_net.state_dict(),
                     "optimizer_distillation": optimizer_distillation.state_dict(),
-                    "scheduler": scheduler_dist_net.state_dict(),
                     "curr_iter": it,
                     "cad_syn": cad_syn_tensor.clone(),
                     "label_syn": label_syn_tensor.clone(),
