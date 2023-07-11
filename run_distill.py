@@ -127,12 +127,12 @@ if __name__ == "__main__":
     #     betas=[0.9, 0.99],
     # )
 
-    optimizer_distillation = torch.optim.SGD(
+    optimizer_distillation = torch.optim.Adam(
         [
             cad_syn_tensor,
         ],
         lr=def_conf.getfloat("lr_cad", 0.1),
-        momentum=0.5,
+        betas= (0.9, 0.9)
     )
     optimizer_distillation.zero_grad()
     model_eval_pool = ["MINKENGINE"]
