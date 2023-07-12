@@ -10,12 +10,12 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         self,
         in_channel,
         out_channel,
-        channels=(32, 48, 64, 96, 128),
+        channels=(128, 192, 256, 512),
         embedding_channel=1024,
         D=3,
         num_points=2048,
         net_depth=3,
-        activation="relu",
+        activation="leakyrelu",
     ):
         ME.MinkowskiNetwork.__init__(self, D)
         self.activation = activation
@@ -25,7 +25,7 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
             out_channel,
             channels,
             embedding_channel,
-            kernel_size=3,
+            kernel_size=5,
             D=D
         )
         self.weight_initialization()
@@ -79,42 +79,42 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
             stride=1,
         )
 
-        self.conv4 = self.conv_block(
-            channels[3],
-            channels[4],
-            kernel_size=kernel_size,
-            stride=1,
-        )
+        # self.conv4 = self.conv_block(
+        #     channels[3],
+        #     channels[4],
+        #     kernel_size=kernel_size,
+        #     stride=1,
+        # )
 
-        self.conv5 = nn.Sequential(
-            self.conv_block(
-                channels[4],
-                embedding_channel // 4,
-                kernel_size=3,
-                stride=1,
-            ),
-            self.conv_block(
-                embedding_channel // 4,
-                embedding_channel // 2,
-                kernel_size=3,
-                stride=1,
-            ),
-            self.conv_block(
-                embedding_channel // 2,
-                embedding_channel,
-                kernel_size=3,
-                stride=1,
-            ),
-        )
+        # self.conv5 = nn.Sequential(
+        #     self.conv_block(
+        #         channels[4],
+        #         embedding_channel // 4,
+        #         kernel_size=3,
+        #         stride=1,
+        #     ),
+        #     self.conv_block(
+        #         embedding_channel // 4,
+        #         embedding_channel // 2,
+        #         kernel_size=3,
+        #         stride=1,
+        #     ),
+        #     self.conv_block(
+        #         embedding_channel // 2,
+        #         embedding_channel,
+        #         kernel_size=3,
+        #         stride=1,
+        #     ),
+        # )
 
         self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
         self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
 
-        self.pool = ME.MinkowskiAvgPooling(kernel_size=3, stride=2, dimension=D)
-        self.pool = ME.MinkowskiMaxPooling(kernel_size=3, stride=2, dimension=D)
+        self.pool = ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension=D)
+        self.pool = ME.MinkowskiMaxPooling(kernel_size=2, stride=2, dimension=D)
         self.final = nn.Sequential(
-            self.mlp_block(embedding_channel, 512),
-            ME.MinkowskiLinear(512, out_channel, bias=False),
+            # self.mlp_block(embedding_channel, 512),
+            ME.MinkowskiLinear(embedding_channel // 2, out_channel, bias=False),
         ) 
 
     def weight_initialization(self):
@@ -141,14 +141,11 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
         y = self.conv3(y2)
         y3 = self.pool(y)
 
-        y = self.conv4(y3)
-        # min_coordinate, _ = y.C.min(0, keepdim=True)
-        # min_coordinate = min_coordinate[:, 1:].cpu()
-        # # min_coordinate = min_coordinate.type(torch.int32)
-        # y_dense = y.dense(min_coordinate=min_coordinate)[0]
+        # y = self.conv4(y3)
+        # min_coordinate = min_coordinate.type(torch.int32)
         # y_dense_shape = y_dense.view(y_dense.size(0),-1)
         # print(y_dense_shape.shape)
-        y4 = self.pool(y)
+        # y4 = self.pool(y)
         # print(y4.shape)
         # x1 = y1.slice(x)
         # print(x1.shape)
@@ -158,10 +155,13 @@ class MinkowskiDistill(ME.MinkowskiNetwork):
 
         # x = ME.cat(x1, x2, x3, x4)
 
-        y = self.conv5(y4)
+        # y = self.conv5(y4)
+        min_coordinate, _ = y.C.min(0, keepdim=True)
+        min_coordinate = min_coordinate[:, 1:].cpu()
+        y_dense = y.dense(min_coordinate=min_coordinate)[0]
         # x1 = self.global_avg_pool(y)
         # x2 = self.global_avg_pool(y)
-        y_out = self.global_max_pool(y)
+        y_out = self.global_max_pool(y3)
         # y_out_2 = self.global_avg_pool(y)
         # return self.tfinal(y_dense_shape)
         return self.final(y_out).F

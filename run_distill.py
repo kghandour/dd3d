@@ -27,6 +27,7 @@ from utils.utils import (
     save_cad,
     list_average,
 )
+from distillation_model.resnet import ResNet14
 import configparser
 import os
 import numpy as np
@@ -127,12 +128,11 @@ if __name__ == "__main__":
     #     betas=[0.9, 0.99],
     # )
 
-    optimizer_distillation = torch.optim.Adam(
+    optimizer_distillation = torch.optim.SGD(
         [
             cad_syn_tensor,
         ],
         lr=def_conf.getfloat("lr_cad", 0.1),
-        betas= (0.9, 0.9)
     )
     optimizer_distillation.zero_grad()
     model_eval_pool = ["MINKENGINE"]
@@ -168,9 +168,14 @@ if __name__ == "__main__":
     # net_distillation.load_state_dict(loaded_classification_dict["state_dict"])
     # net_distillation.eval()
 
-    net_distillation = MinkowskiDistill(
-        in_channel=3,
-        out_channel=55,
+    # net_distillation = MinkowskiDistill(
+    #     in_channel=3,
+    #     out_channel=55,
+    # ).to(device)
+
+    net_distillation = ResNet14(
+        in_channels=3,
+        out_channels=55
     ).to(device)
 
     print(net_distillation)
