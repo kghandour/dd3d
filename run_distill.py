@@ -27,7 +27,7 @@ from utils.utils import (
     save_cad,
     list_average,
 )
-from distillation_model.resnet import ResNet14
+from distillation_model.resnet import ResNet14, ResNet18
 import configparser
 import os
 import numpy as np
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     num_points = def_conf.getint("num_points", 2048)  ## Number of points
     load_classification_model_path = def_conf.get("load_model")
     loaded_classification_dict = torch.load(load_classification_model_path)
-    classes_to_distill = ["airplane", "bed"]
+    classes_to_distill = []
 
     distillation_out_path = os.path.join(
         def_conf.get("save_path"), def_conf.get("distillation_exp_name")
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     #     out_channel=55,
     # ).to(device)
 
-    net_distillation = ResNet14(
+    net_distillation = ResNet18(
         in_channels=3,
         out_channels=55
     ).to(device)
