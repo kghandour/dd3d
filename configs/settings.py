@@ -21,19 +21,17 @@ def get_optimizer(model_params, target="dist", opt=""):
 
     if(opt=="sgd"):
         return torch.optim.SGD(
-            [
-                model_params,
-            ],
+            model_params,
             lr=lr,
             momentum=modelconfig.getfloat("dist_momentum", 0.1)
         )
     else:
         return torch.optim.Adam(
-            [
-                model_params,
-            ],
+            params=model_params,
             lr=lr,
-            betas=[modelconfig.getfloat("dist_beta_1", 0.9), modelconfig.getfloat("dist_beta_2", 0.99)]
+            betas=[modelconfig.getfloat("dist_beta_1", 0.9), modelconfig.getfloat("dist_beta_2", 0.99)],
+            eps=1e-08,
+            weight_decay=1e-4,
         )
     
 
@@ -85,6 +83,7 @@ def init():
     global labels_all
     global indices_class
     global num_workers
+    global exp_file_name
 
     cad_paths_all = []
     labels_all = []
@@ -108,20 +107,21 @@ def init():
     defconfig = config["DEFAULT"]
     shapenetconfig = config["SHAPENET"]
     modelconfig = config["MODEL"]
-
+    date_time = now.strftime("%Y%m%d%H%M%S")
     num_workers = defconfig.getint("num_workers")
+    exp_file_name = date_time+"_"+defconfig.get("experiment_name")
 
     if(DEBUG):
         logger = logging.getLogger("Distillation")
         logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        date_time = now.strftime("%Y%m%d%H%M%S")
-        logging_file_path = os.path.join(defconfig.get("log_dir"),date_time+"_"+defconfig.get("experiment_name"))
+        
+        logging_file_path = os.path.join(defconfig.get("log_dir"),exp_file_name)
         print(logging_file_path)
         file_handler = logging.FileHandler(logging_file_path+".txt")
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
         log_string("INI Config Reading [DEFAULT] section:" + str(dict(defconfig)))
-        tensorboard_path = os.path.join(defconfig.get("tensorboard_dir"),date_time+"_"+defconfig.get("experiment_name"))
+        tensorboard_path = os.path.join(defconfig.get("tensorboard_dir"),exp_file_name)
         summary_writer = SummaryWriter(log_dir=tensorboard_path)
