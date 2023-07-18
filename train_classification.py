@@ -1,5 +1,5 @@
 from configs import settings
-from models.pointnet2_ssg_wo_normals.pointnet2_cls_msg import get_model, get_loss
+from models.pointnet2_ssg_wo_normals.pointnet2_cls_ssg import get_model, get_loss
 from test_classification import test_classification
 from utils.ShapeNet import ShapeNetDataset
 from torch.utils.data import DataLoader
@@ -116,7 +116,7 @@ if __name__=="__main__":
         settings.log_string('No existing model, starting training from scratch...')
         start_epoch = 0
     
-    classifier_optimizer = settings.get_optimizer(classifier_network.parameters(), target="classifier", opt="Adam")
+    classifier_optimizer = settings.get_optimizer(classifier_network.parameters(), target="classifier", opt=settings.modelconfig.get("dist_opt"))
     scheduler = torch.optim.lr_scheduler.StepLR(classifier_optimizer, step_size=20, gamma=0.7)
 
     '''Starting Training'''

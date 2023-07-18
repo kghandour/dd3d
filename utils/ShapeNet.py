@@ -7,6 +7,13 @@ import configs.settings as settings
 import open3d as o3d
 import copy
 
+def pc_normalize(pc):
+    centroid = np.mean(pc, axis=0)
+    pc = pc - centroid
+    m = np.max(np.sqrt(np.sum(pc**2, axis=1)))
+    pc = pc / m
+    return pc
+
 class ShapeNetDataset(Dataset):
     def __init__(self, cls_list=[], phase="train", modelnet40=False):
         super().__init__()
@@ -68,6 +75,7 @@ class ShapeNetDataset(Dataset):
         xyz = np.asarray(pcd.points)
         np.random.shuffle(xyz)
         xyz = xyz[:self.num_points]
+        # xyz = pc_normalize(xyz)
         xyz = torch.from_numpy(xyz).type(torch.float32)
         return xyz, self.labels[index]
     
