@@ -5,6 +5,8 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 from utils.ClassShapeNet import ClassShapeNetDataset
+import open3d as o3d
+from utils.train_val_split import CLASS_NAME_TO_ID
 
 def get_optimizer(model_params, target="dist", opt=""):
     if(opt==""):
@@ -55,8 +57,6 @@ def get_rand_cad(c, n):  # get random n images from class c
 
 def init_indices(n_classes):
     global indices_class
-    global num_classes
-    num_classes = n_classes
     indices_class = [[] for c in range(num_classes)]
     for i, lab in enumerate(labels_all):
         indices_class[lab].append(i)
@@ -76,6 +76,7 @@ def init():
     global defconfig
     global shapenetconfig
     global modelconfig
+    global distillationconfig
     global logger
     global summary_writer
     global num_classes
@@ -84,6 +85,9 @@ def init():
     global indices_class
     global num_workers
     global exp_file_name
+    global cad_per_class
+    global num_points
+    global batch_size
 
     cad_paths_all = []
     labels_all = []
@@ -107,10 +111,13 @@ def init():
     defconfig = config["DEFAULT"]
     shapenetconfig = config["SHAPENET"]
     modelconfig = config["MODEL"]
+    distillationconfig = config["DISTILLATION"]
     date_time = now.strftime("%Y%m%d%H%M%S")
     num_workers = defconfig.getint("num_workers")
     exp_file_name = date_time+"_"+defconfig.get("experiment_name")
-
+    cad_per_class = distillationconfig.getint("cad_per_class")
+    num_points = shapenetconfig.getint("num_points")
+    batch_size = distillationconfig.getint("batch_size")
     if(DEBUG):
         logger = logging.getLogger("Distillation")
         logger.setLevel(logging.INFO)
@@ -125,3 +132,25 @@ def init():
         log_string("INI Config Reading [DEFAULT] section:" + str(dict(defconfig)))
         tensorboard_path = os.path.join(defconfig.get("tensorboard_dir"),exp_file_name)
         summary_writer = SummaryWriter(log_dir=tensorboard_path)
+
+def get_class_name_from_id(val):
+    return [k for k, v in CLASS_NAME_TO_ID.items() if v == val][0]
+
+def save_cad(cad_list, directory, iteration):
+    cad_list_copy = cad_list.clone().detach().cpu().numpy()
+    for i, cad in enumerate(cad_list_copy):
+        cad[cad < -1] = -1
+        cad[cad > 1] = 1
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(np.asarray(cad))
+        ipc = cad_per_class
+        name = get_class_name_from_id(i // ipc)
+        o3d.io.write_point_cloud(
+            directory
+            + "/"
+            + name
+            + "_"
+            + str(iteration)
+            + ".ply",
+            pcd,
+        )
