@@ -51,6 +51,15 @@ def get_rand_cad_loader(c, n):
     dataset = ClassShapeNetDataset(cad_path=cad_paths, class_id=c)
     return DataLoader(dataset=dataset, batch_size=modelconfig.getint("batch_size", 4), shuffle=False)
 
+def get_fixed_cad_loader(c):
+    cad_paths = cad_paths_all[indices_class[c][:1]]
+    dataset = ClassShapeNetDataset(cad_path=cad_paths, class_id=c)
+    return DataLoader(dataset=dataset, batch_size=modelconfig.getint("batch_size", 4), shuffle=False)
+
+def get_fixed_cad_path(c):
+    cad_paths = cad_paths_all[indices_class[c][:1]]
+    return cad_paths
+
 def get_rand_cad(c, n):  # get random n images from class c
     idx_shuffle = np.random.permutation(indices_class[c])[:n]
     return cad_paths_all[idx_shuffle]
@@ -118,9 +127,9 @@ def init():
     cad_per_class = distillationconfig.getint("cad_per_class")
     num_points = shapenetconfig.getint("num_points")
     batch_size = distillationconfig.getint("batch_size")
+    logger = logging.getLogger("Distillation")
+    logger.setLevel(logging.INFO)
     if(DEBUG):
-        logger = logging.getLogger("Distillation")
-        logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         
         logging_file_path = os.path.join(defconfig.get("log_dir"),exp_file_name)
