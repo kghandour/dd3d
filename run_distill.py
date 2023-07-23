@@ -15,6 +15,8 @@ from distillation_loss import get_distillation_loss, match_loss
 import torch.nn as nn
 from utils.train_val_split import CLASS_NAME_TO_ID
 import math
+import shutil
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
@@ -37,7 +39,7 @@ if __name__=="__main__":
 
     synthetic_xyz, synthetic_labels = init_synth(cls_list=cls_list)
 
-    synthetic_optimizer = settings.get_optimizer([synthetic_xyz], target="dist", opt="sgd")
+    synthetic_optimizer = settings.get_optimizer([synthetic_xyz], target="dist", opt="adam")
     distillation_network = get_model(settings.num_classes, False).to(settings.device)
     distillation_criterion = get_loss()
     for m in distillation_network.modules():
@@ -49,6 +51,10 @@ if __name__=="__main__":
     log_loss = []
 
     least_loss = math.inf
+    if(len(cls_list)==1):
+        temp_path = settings.get_fixed_cad_path( CLASS_NAME_TO_ID[cls_list[0]])
+        settings.log_string("Exporting the main model for comparison: "+str(temp_path[0]))
+        shutil.copy(temp_path[0], "/home/ghandour/")
 
     for iteration in tqdm(range(total_iterations),desc="Iteration: ", smoothing=0.9):
         
@@ -72,7 +78,7 @@ if __name__=="__main__":
                 else:
                     cls = cls_iter
                 synthetic_optimizer.zero_grad()
-                RealDataLoader = settings.get_rand_cad_loader(cls, 4)
+                RealDataLoader = settings.get_fixed_cad_loader(cls)
                 synthetic_cls_xyz = synthetic_xyz[cls_iter * settings.cad_per_class : (cls_iter + 1) * settings.cad_per_class].clone()
                 synthetic_cls_label = torch.ones((settings.cad_per_class), device=settings.device, dtype=torch.long) * cls
                 synthetic_cls_dataset = SyntheticDataset(synthetic_cls_xyz, synthetic_cls_label)
