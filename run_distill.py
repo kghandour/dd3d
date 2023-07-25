@@ -6,7 +6,7 @@ import configs.settings as settings
 import torch
 from utils.ShapeNet import ShapeNetDataset
 from torch.utils.data import DataLoader
-from models.pointnet2_ssg_wo_normals.pointnet2_cls_ssg import get_model, get_loss
+from models.pointnet2_ssg_wo_normals.pointnet2_cls_ssg import get_model, get_loss, get_ce_loss
 import numpy as np
 from tqdm import tqdm
 from test_classification import test_classification
@@ -41,11 +41,19 @@ if __name__=="__main__":
 
     synthetic_optimizer = settings.get_optimizer([synthetic_xyz], target="dist", opt="adam")
     distillation_network = get_model(settings.num_classes, False).to(settings.device)
-    distillation_criterion = get_loss()
+    load_dist_path = settings.distillationconfig.get("load_dist_model", "None")
+    if(load_dist_path != "None"):
+        settings.log_string("Loading pretrained Distilled state from "+load_dist_path)
+        load_dist_dict = torch.load(load_dist_path)
+        distillation_network.load_state_dict(load_dist_dict["model_state_dict"])
+
+    distillation_criterion = get_ce_loss()
     for m in distillation_network.modules():
         if isinstance(m, nn.BatchNorm2d):
             m.eval()
         if isinstance(m, nn.BatchNorm1d):
+            m.eval()
+        if isinstance(m, nn.Dropout):
             m.eval()
     loop_n = len(cls_list) if len(cls_list) > 0 else settings.num_classes
     log_loss = []
