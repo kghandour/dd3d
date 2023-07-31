@@ -25,6 +25,9 @@ def get_distillation_loss(distillation_network, distillation_criterion, dataload
 
 def distance_wb(gwr, gws):
     shape = gwr.shape
+    if(len(shape) == 5): #conv, out*in*1*points
+        gwr = gwr.reshape(shape[0], shape[1] * shape[2] * shape[3] * shape[4])
+        gws = gws.reshape(shape[0], shape[1] * shape[2] * shape[3] * shape[4])   
     if len(shape) == 4:  # conv, out*in*h*w
         gwr = gwr.reshape(shape[0], shape[1] * shape[2] * shape[3])
         gws = gws.reshape(shape[0], shape[1] * shape[2] * shape[3])
@@ -48,9 +51,10 @@ def distance_wb(gwr, gws):
 
 def match_loss(gw_syn, gw_real, dis_metric, device):
     dis = torch.tensor(0.0).to(device)
-
+    count_length = [0,0,0,0,0]
     if dis_metric == "ours":
         for ig in range(len(gw_real)):
+            count_length[len(gw_real[ig].shape)]+=1
             gwr = gw_real[ig]
             gws = gw_syn[ig]
             dis += distance_wb(gwr, gws)
