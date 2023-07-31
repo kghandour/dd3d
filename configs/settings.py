@@ -4,6 +4,8 @@ import torch
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
+from models.ConvNet3D import ConvNet3D
+from models.pointnet2_ssg_wo_normals.pointnet2_cls_ssg import get_model
 from utils.ClassShapeNet import ClassShapeNetDataset
 import open3d as o3d
 from utils.train_val_split import CLASS_NAME_TO_ID
@@ -35,7 +37,18 @@ def get_optimizer(model_params, target="dist", opt=""):
             eps=1e-08,
             weight_decay=1e-4,
         )
-    
+def get_default_convnet_setting():
+    net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
+    return net_width, net_depth, net_act, net_norm, net_pooling
+
+def get_network(name: str):
+    name = str.lower(name)
+    if(name=="pointnet" or name=="pointnet++"):
+        return get_model(num_classes, False)
+    elif(name=="convnet" or name=="convnet3d"):
+        net_width, net_depth, net_act, net_norm, net_pooling = get_default_convnet_setting()
+        net = ConvNet3D(channel=3, num_classes=num_classes, num_points=num_points, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling)
+        return net
 
 def log_string(str):
     if(DEBUG):

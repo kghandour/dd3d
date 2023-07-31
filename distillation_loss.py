@@ -83,5 +83,4 @@ def match_loss(gw_syn, gw_real, dis_metric, device):
 
     else:
         exit("unknown distance function: %s" % dis_metric)
-
     return dis

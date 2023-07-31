@@ -16,7 +16,6 @@ import torch.nn as nn
 from utils.train_val_split import CLASS_NAME_TO_ID
 import math
 import shutil
-from utils.Network import get_network
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,7 +40,7 @@ if __name__=="__main__":
     synthetic_xyz, synthetic_labels = init_synth(cls_list=cls_list)
 
     synthetic_optimizer = settings.get_optimizer([synthetic_xyz], target="dist", opt="adam")
-    distillation_network = get_network("convnet").to(settings.device)
+    distillation_network = settings.get_network("pointnet").to(settings.device)
     load_dist_path = settings.distillationconfig.get("load_dist_model", "None")
     if(load_dist_path != "None"):
         settings.log_string("Loading pretrained Distilled state from "+load_dist_path)
