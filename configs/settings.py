@@ -99,6 +99,7 @@ def init():
     global shapenetconfig
     global modelconfig
     global distillationconfig
+    global mnistconfig
     global logger
     global summary_writer
     global num_classes
@@ -134,6 +135,7 @@ def init():
     shapenetconfig = config["SHAPENET"]
     modelconfig = config["MODEL"]
     distillationconfig = config["DISTILLATION"]
+    mnistconfig = config["MNIST"]
     date_time = now.strftime("%Y%m%d%H%M%S")
     num_workers = defconfig.getint("num_workers")
     exp_file_name = date_time+"_"+defconfig.get("experiment_name")
