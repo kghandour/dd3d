@@ -3,6 +3,7 @@ import configs.settings as settings
 import os, h5py
 import numpy as np
 import torch
+from tqdm import tqdm
 
 class MnistDataset(Dataset):
     def __init__(
@@ -11,6 +12,7 @@ class MnistDataset(Dataset):
         ):
         super().__init__()
         self.data, self.labels = self.load_data(phase)
+        print(self.data.shape, self.labels.shape)
     
     def load_data(self, phase):
         data, labels = [], []
@@ -23,21 +25,22 @@ class MnistDataset(Dataset):
         else:
             exit("Unknown phase. Please specify either train or val or test")
         with h5py.File(data_path) as f:
-            for key in f.keys():
-                data.append(f[key]["points"][:].astype("float32"))
-                labels.append(f[key].attrs['label'].astype("int64"))
-        labels = np.stack(labels, axis=0)
-        return data, labels
+            for key in tqdm(f.keys()):
+                points = np.array(f[key]["points"][:].astype("float32"))
+                np.random.shuffle(points)
+                points = points[:settings.num_points]
+                data.append(points)
+                labels.append(f[key].attrs['label'])
+        data = np.stack(data, axis=0)
+        return data, np.array(labels)
     
     def __getitem__(self, index):
         xyz = self.data[index]
-        xyz = np.array(xyz)
-        np.random.shuffle(xyz)
         if(len(xyz)>settings.num_points):
             xyz = xyz[: settings.num_points]
         label = self.labels[index]
         xyz = torch.from_numpy(xyz)
-        label = torch.from_numpy(xyz)
+        label = torch.from_numpy(label)
         return {
             "coordinates": xyz.to(torch.float32),
             "features": xyz.to(torch.float32),
