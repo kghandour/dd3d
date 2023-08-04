@@ -1,6 +1,6 @@
 from configs import settings
 from models.MEConv import MEConv, create_input_batch
-from utils.Mnist2D import Mnist2Dreal, get_dataset, Mnist2D, get_mnist_dataloader
+from utils.Mnist2D import Mnist2Dreal, Mnist2Dsyn, get_dataset, Mnist2D, get_mnist_dataloader
 from torch.utils.data import DataLoader
 from utils.MinkowskiCollate import stack_collate_fn, minkowski_collate_fn
 import MinkowskiEngine as ME
@@ -37,6 +37,12 @@ def get_images(c, n): # get random n images from class c
     dataset = Mnist2Dreal(img_real, labels)
     return get_mnist_dataloader(dataset, n)
 
+def generate_synth_dataloader(c):
+    img_syn = image_syn[c*settings.cad_per_class:(c+1)*settings.cad_per_class]
+    lab_syn = torch.ones((settings.cad_per_class,), device=settings.device, dtype=torch.long) * c
+    dataset = Mnist2Dsyn(img_syn, lab_syn)
+    return get_mnist_dataloader(dataset, settings.cad_per_class)
+
 if __name__ == "__main__":
     settings.init()
 
@@ -54,11 +60,13 @@ if __name__ == "__main__":
     optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.5) # optimizer_img for synthetic data
     optimizer_img.zero_grad()
     
-
-    for batch in get_images(0, 8):
-        input = create_input_batch(batch, True, device=settings.device)
-        loss = network(input)
-        
-        print(loss)
+    for c in range(num_classes):
+        for batch in get_images(c, 8):
+            input = create_input_batch(batch, True, device=settings.device)
+            loss = network(input)
+        for batch in generate_synth_dataloader(c):
+            input = create_input_batch(batch, True, device=settings.device)
+            loss = network(input)
+            # print(loss)
         
 

@@ -57,6 +57,24 @@ class Mnist2Dreal(Dataset):
   def __len__(self):
      return self.images.shape[0]
   
+class Mnist2Dsyn(Dataset):
+  def __init__(self, images_tensor, labels_tensor):
+    self.images = images_tensor
+    self.labels = labels_tensor
+
+  def __getitem__(self, index):
+    image = self.images[index]
+    label = self.labels[index]
+    return {
+        "coordinates":image.to(torch.float32),
+        "features":image.to(torch.float32),
+        "label": int(label)
+    }
+  
+  def __len__(self):
+     return self.images.shape[0]
+    
+  
 def get_mnist_dataloader(dataset, batch_size):
   train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, collate_fn=minkowski_collate_fn)
   return train_loader   
