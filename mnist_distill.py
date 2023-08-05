@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     ''' initialize the synthetic data '''
     image_syn = torch.randint(0, 27, size=(num_classes*settings.cad_per_class, settings.num_points, 2), dtype=torch.float, device=settings.device)
-    image_syn = torch.dstack((torch.ones((image_syn.shape[0], image_syn.shape[1], 0)).to(settings.device), image_syn)).requires_grad_()
+    image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
     criterion = nn.CrossEntropyLoss().to(settings.device)
     optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.5) # optimizer_img for synthetic data
@@ -116,7 +116,7 @@ if __name__ == "__main__":
                     loss_syn = criterion(output, batch['labels'])
                     gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
                 
-                loss += match_loss(gw_syn, gw_real, "ours", settings.device)
+                loss += match_loss(gw_syn, gw_real, settings.modelconfig.get("dist_opt"), settings.device)
             optimizer_img.zero_grad()
             loss.backward()
             optimizer_img.step()
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         log_loss.append(loss_avg)
         # settings.log_string("Iteration "+str(iteration)+" Loss:"+str(loss_avg))
         # settings.log_tensorboard("Distillation/Matched Loss",loss_avg, iteration)
-        if(iteration%10 ==0):
+        if(iteration%100 ==0):
             loss_value = sum(log_loss)/len(log_loss)
             settings.log_string("Iteration: "+str(iteration)+" Loss matched is "+ str(loss_value))
             settings.log_tensorboard("Distillation/Matched Loss",loss_value, iteration)

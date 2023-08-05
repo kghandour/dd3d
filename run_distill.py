@@ -103,7 +103,7 @@ if __name__=="__main__":
                 gw_syn = torch.autograd.grad(
                     SyntheticLoss, distillation_network.parameters(), create_graph=True
                 )
-                loss = match_loss(gw_syn, gw_real, dis_metric="ours", device=settings.device)
+                loss = match_loss(gw_syn, gw_real, dis_metric="mse", device=settings.device)
 
                 log_loss.append(loss.item())
                 loss.backward()
