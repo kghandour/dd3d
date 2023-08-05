@@ -5,12 +5,12 @@ class MEConv(ME.MinkowskiNetwork):
     def __init__(self, in_channel, out_channel, embedding_channel=1024, dimension=3):
         ME.MinkowskiNetwork.__init__(self, dimension)
         self.D = dimension ## 2 for img 3 for 3D
-        self.mlp = nn.Sequential(
-                ME.MinkowskiLinear(3, 128, bias=False),
-                ME.MinkowskiLeakyReLU(),
-            )
+        # self.mlp = nn.Sequential(
+        #         ME.MinkowskiLinear(3, 128, bias=False),
+        #         ME.MinkowskiLeakyReLU(),
+        #     )
         self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
-        self.features = self._make_layers(128, out_channel, embedding_channel)
+        self.features = self._make_layers(3, out_channel, embedding_channel)
         self.classifier = ME.MinkowskiLinear(128, 10)
     def _make_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
@@ -20,12 +20,12 @@ class MEConv(ME.MinkowskiNetwork):
             ## Ignoring Batching for now
             layers += [ME.MinkowskiReLU(inplace=True)]
             layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
-
+            in_channel = 128
         return nn.Sequential(*layers)
     
     def forward(self, x: ME.TensorField):
-        out = self.mlp(x)
-        out = out.sparse()
+        # out = self.mlp(x)
+        out = x.sparse()
         out = self.features(out)
         out = self.global_avg_pool(out)
         out = self.classifier(out)

@@ -51,7 +51,7 @@ class Mnist2Dreal(Dataset):
     return {
         "coordinates":occ_grid.to(torch.float32),
         "features":occ_grid.to(torch.float32),
-        "label": int(label)
+        "label": label.to(torch.int64)
     }
   
   def __len__(self):
@@ -68,7 +68,7 @@ class Mnist2Dsyn(Dataset):
     return {
         "coordinates":image.to(torch.float32),
         "features":image.to(torch.float32),
-        "label": int(label)
+        "label": label.to(torch.int64)
     }
   
   def __len__(self):

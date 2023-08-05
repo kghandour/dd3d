@@ -5,7 +5,7 @@ def minkowski_collate_fn(list_data):
     coordinates_batch, features_batch, labels_batch = ME.utils.sparse_collate(
         [d["coordinates"] for d in list_data],
         [d["features"] for d in list_data],
-        [d["label"] for d in list_data],
+        [d["label"].reshape(1) for d in list_data],
         dtype=torch.float32,
     )
     return {

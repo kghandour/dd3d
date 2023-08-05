@@ -160,11 +160,12 @@ def init():
 def get_class_name_from_id(val):
     return [k for k, v in CLASS_NAME_TO_ID.items() if v == val][0]
 
-def save_cad(cad_list, directory, iteration):
+def save_cad(cad_list, directory, iteration, normalize=True):
     cad_list_copy = cad_list.clone().detach().cpu().numpy()
     for i, cad in enumerate(cad_list_copy):
-        cad[cad < -1] = -1
-        cad[cad > 1] = 1
+        if(normalize):
+            cad[cad < -1] = -1
+            cad[cad > 1] = 1
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(np.asarray(cad))
         ipc = cad_per_class
