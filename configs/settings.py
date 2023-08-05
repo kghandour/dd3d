@@ -169,7 +169,7 @@ def save_cad(cad_list, directory, iteration, normalize=True):
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(np.asarray(cad))
         ipc = cad_per_class
-        name = get_class_name_from_id(i // ipc)
+        name = str(i)
         o3d.io.write_point_cloud(
             directory
             + "/"
