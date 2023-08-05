@@ -39,7 +39,7 @@ def distance_wb(gwr, gws):
     elif len(shape) == 1:  # batchnorm/instancenorm, C; groupnorm x, bias
         gwr = gwr.reshape(1, shape[0])
         gws = gws.reshape(1, shape[0])
-        return torch.tensor(0, dtype=torch.float, device=gwr.device)
+        # return torch.tensor(0, dtype=torch.float, device=gwr.device)
 
     dis_weight = torch.sum(
         1

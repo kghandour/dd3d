@@ -105,13 +105,13 @@ if __name__ == "__main__":
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
                 for batch in get_images(c, 8):
-                    input = create_input_batch(batch, True, device=settings.device)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     output = network(input)
                     loss_real = criterion(output, batch['labels'])
                     gw_real = torch.autograd.grad(loss_real, net_parameters)
                     gw_real = list((_.detach().clone() for _ in gw_real))
                 for batch in generate_synth_dataloader(c):
-                    input = create_input_batch(batch, True, device=settings.device)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     output = network(input)
                     loss_syn = criterion(output, batch['labels'])
                     gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
