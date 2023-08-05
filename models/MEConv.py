@@ -5,23 +5,28 @@ class MEConv(ME.MinkowskiNetwork):
     def __init__(self, in_channel, out_channel, embedding_channel=1024, dimension=3):
         ME.MinkowskiNetwork.__init__(self, dimension)
         self.D = dimension ## 2 for img 3 for 3D
-        self.mlp = nn.Sequential(
-                ME.MinkowskiLinear(3, 128, bias=False),
-                ME.MinkowskiReLU(),
-            )
+        # self.mlp = nn.Sequential(
+        #         ME.MinkowskiLinear(3, 128, bias=False),
+        #         ME.MinkowskiReLU(),
+        #     )
         self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
-        self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
-        self.features = self._make_layers(1, out_channel, embedding_channel)
-        self.classifier = ME.MinkowskiLinear(128, 10)
+        # self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
+        self.features = self._make_layers(3, out_channel, embedding_channel)
+        self.classifier = ME.MinkowskiLinear(2048, 10)
     def _make_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
         channels = (128)
-        for d in range(3):
+        for d in range(2):
             layers += [ME.MinkowskiConvolution(in_channel, 128, kernel_size=3, dimension=self.D)]
             ## Ignoring Batching for now
             layers += [ME.MinkowskiReLU(inplace=True)]
             layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
             in_channel = 128
+        layers += [ME.MinkowskiConvolution(in_channel, 2048, kernel_size=3, dimension=self.D)]
+            ## Ignoring Batching for now
+        layers += [ME.MinkowskiReLU(inplace=True)]
+        layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
+        in_channel = 128
         return nn.Sequential(*layers)
     
     def forward(self, x: ME.TensorField):
