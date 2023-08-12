@@ -104,14 +104,16 @@ if __name__ == "__main__":
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
-                for batch in get_images(c, 8):
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                for batch in get_images(c, settings.modelconfig.getint("batch_size")):
+                    input = create_input_batch(batch, True, device=settings.device)
+                    # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
                     output = network(input)
+                    print(output.shape)
                     loss_real = criterion(output, batch['labels'])
                     gw_real = torch.autograd.grad(loss_real, net_parameters)
                     gw_real = list((_.detach().clone() for _ in gw_real))
                 for batch in generate_synth_dataloader(c):
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                    input = create_input_batch(batch, True, device=settings.device)
                     output = network(input)
                     loss_syn = criterion(output, batch['labels'])
                     gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
@@ -126,12 +128,12 @@ if __name__ == "__main__":
         log_loss.append(loss_avg)
         # settings.log_string("Iteration "+str(iteration)+" Loss:"+str(loss_avg))
         # settings.log_tensorboard("Distillation/Matched Loss",loss_avg, iteration)
-        if(iteration%100 ==0):
+        if(iteration > 1 and iteration%100 ==0):
             loss_value = sum(log_loss)/len(log_loss)
             settings.log_string("Iteration: "+str(iteration)+" Loss matched is "+ str(loss_value))
             settings.log_tensorboard("Distillation/Matched Loss",loss_value, iteration)
             log_loss = []
-        if(iteration%settings.distillationconfig.getint("save_cad_every")==0):
+        if(iteration > 1 and iteration%settings.distillationconfig.getint("save_cad_every")==0):
             if (loss_value <= least_loss):
                 settings.log_string("Saving Model")
                 settings.log_string("New Loss:"+str(loss_value)+" Old Loss: "+str(least_loss))

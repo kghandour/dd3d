@@ -16,7 +16,7 @@ def get_dataset():
     data_path = settings.mnistconfig.get("dataset_dir")
     ### Ignoring transform because I want it to be binary
 
-    transform = transforms.Compose([transforms.ToTensor(), ThresholdTransform(thr_255=127)])
+    transform = transforms.Compose([transforms.ToTensor(), ThresholdTransform(thr_255=80)])
     dst_train = datasets.MNIST(data_path, train=True, download=True, transform=transform) # no augmentation
     dst_test = datasets.MNIST(data_path, train=False, download=True, transform=transform)
     class_names = [str(c) for c in range(num_classes)]
@@ -29,7 +29,7 @@ class Mnist2D(datasets.MNIST):
 
     def __getitem__(self, index: int):
         image, label = super().__getitem__(index)
-        occ_grid = torch.argwhere(image==1)
+        occ_grid = torch.argwhere(image==1)[:settings.num_points]
         return {
             "coordinates":occ_grid.to(torch.float32),
             "features":occ_grid.to(torch.float32),
@@ -47,7 +47,7 @@ class Mnist2Dreal(Dataset):
   def __getitem__(self, index):
     image = self.images[index]
     label = self.labels[index]
-    occ_grid = torch.argwhere(image==1)
+    occ_grid = torch.argwhere(image==1)[:settings.num_points]
     return {
         "coordinates":occ_grid.to(torch.float32),
         "features":occ_grid.to(torch.float32),
