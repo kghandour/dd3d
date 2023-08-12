@@ -50,8 +50,22 @@ def export_pcd(arr, c):
     )
 
 def get_images(c, n): # get random n images from class c
+    print(c)
     idx_shuffle = np.random.permutation(indices_class[c])[:n]
     img_real = images_all[idx_shuffle]
+    print("Indices for input digit %i, %i",c, idx_shuffle)
+    print(img_real.shape)
+    labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
+    dataset = Mnist2Dreal(img_real, labels)
+    return get_mnist_dataloader(dataset, n)
+
+def get_images_fixed(c,idx, n): # get random n images from class c
+    print(c)
+    print(idx)
+    # idx_shuffle = np.random.permutation(indices_class[c])[:n]
+    img_real = images_all[[idx]]
+    # print("Indices for input digit %i, %i",c, idx_shuffle)
+    print(img_real.shape)
     labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
     dataset = Mnist2Dreal(img_real, labels)
     return get_mnist_dataloader(dataset, n)
@@ -105,7 +119,9 @@ if __name__ == "__main__":
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
                 for batch in get_images(c, settings.modelconfig.getint("batch_size")):
+                # for batch in get_images_fixed(c, 9874, settings.modelconfig.getint("batch_size")):
                     input = create_input_batch(batch, True, device=settings.device)
+                    print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
                     output = network(input)
                     print(output.shape)
