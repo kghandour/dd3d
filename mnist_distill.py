@@ -36,7 +36,9 @@ def generate_synth(dst_train, num_classes):
 def export_pcd(arr, c):
     to_save = np.asarray(arr.cpu())
     occ_grid = np.argwhere(to_save==1)
-    pcd = o3d.geometry.PointCloud()
+    pcd = o3d.geometry.PointCloud(
+
+    )
     pcd.points = o3d.utility.Vector3dVector(occ_grid)
     name = str(c)
     o3d.io.write_point_cloud(
@@ -50,22 +52,22 @@ def export_pcd(arr, c):
     )
 
 def get_images(c, n): # get random n images from class c
-    print(c)
+    # print(c)
     idx_shuffle = np.random.permutation(indices_class[c])[:n]
     img_real = images_all[idx_shuffle]
-    print("Indices for input digit %i, %i",c, idx_shuffle)
-    print(img_real.shape)
+    # print("Indices for input digit %i, %i",c, idx_shuffle)
+    # print(img_real.shape)
     labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
     dataset = Mnist2Dreal(img_real, labels)
     return get_mnist_dataloader(dataset, n)
 
 def get_images_fixed(c,idx, n): # get random n images from class c
-    print(c)
-    print(idx)
+    # print(c)
+    # print(idx)
     # idx_shuffle = np.random.permutation(indices_class[c])[:n]
     img_real = images_all[[idx]]
     # print("Indices for input digit %i, %i",c, idx_shuffle)
-    print(img_real.shape)
+    # print(img_real.shape)
     labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
     dataset = Mnist2Dreal(img_real, labels)
     return get_mnist_dataloader(dataset, n)
@@ -104,7 +106,11 @@ if __name__ == "__main__":
         print('real images channel %d, mean = %.4f, std = %.4f'%(ch, torch.mean(images_all[:, ch]), torch.std(images_all[:, ch])))
 
     ''' initialize the synthetic data '''
-    image_syn = torch.randint(0, 27, size=(num_classes*settings.cad_per_class, settings.num_points, 2), dtype=torch.float, device=settings.device)
+    syn_shape = (num_classes*settings.cad_per_class, settings.num_points, 2)
+    image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
+    # while(image_syn.unique(dim=1).shape != syn_shape):
+    #     image_syn = torch.randint(0, 28, size= syn_shape, dtype=torch.float, device=settings.device)
+    #     settings.log_string("Repeated elements found, regenerating again")
     image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
     criterion = nn.CrossEntropyLoss().to(settings.device)
@@ -121,10 +127,10 @@ if __name__ == "__main__":
                 for batch in get_images(c, settings.modelconfig.getint("batch_size")):
                 # for batch in get_images_fixed(c, 9874, settings.modelconfig.getint("batch_size")):
                     input = create_input_batch(batch, True, device=settings.device)
-                    print(input.shape)
+                    # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
                     output = network(input)
-                    print(output.shape)
+                    # print(output.shape)
                     loss_real = criterion(output, batch['labels'])
                     gw_real = torch.autograd.grad(loss_real, net_parameters)
                     gw_real = list((_.detach().clone() for _ in gw_real))
