@@ -9,6 +9,10 @@ from models.pointnet2_ssg_wo_normals.pointnet2_cls_ssg import get_model
 from utils.ClassShapeNet import ClassShapeNetDataset
 import open3d as o3d
 from utils.train_val_split import CLASS_NAME_TO_ID
+import open3d as o3d
+from open3d.visualization.tensorboard_plugin import summary
+from open3d.visualization.tensorboard_plugin.util import to_dict_batch
+
 
 def get_optimizer(model_params, target="dist", opt=""):
     if(opt==""):
@@ -58,6 +62,16 @@ def log_string(str):
 def log_tensorboard(tag, scalar_value, global_step):
     if(DEBUG):
         summary_writer.add_scalar(tag=tag, scalar_value=scalar_value, global_step=global_step)
+
+def log_tensorboard_pcd(tag, input, global_step):
+    if(DEBUG):
+        (img_syn, lab_syn) = input
+        xyz = img_syn.clone().detach().squeeze().cpu().numpy() 
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz)
+        pcd.paint_uniform_color([1, 0.706, 0])
+        summary_writer.add_3d('Label: '+str(lab_syn), to_dict_batch([pcd]), step=global_step)
+
 
 def get_rand_cad_loader(c, n):
     cad_paths = get_rand_cad(c, n)

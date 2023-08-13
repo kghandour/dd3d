@@ -16,10 +16,11 @@ class MEConv(ME.MinkowskiNetwork):
         #         ME.MinkowskiReLU(),
         #     )
         self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
+        self.global_sum_pool = ME.MinkowskiGlobalSumPooling()
         self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
         # self.global_sum = ME.MinkowskiGlobalSumPooling()
         self.features = self._make_layers(3, out_channel, embedding_channel)
-        self.classifier = nn.Linear(1920, 10)
+        self.classifier = nn.Linear(16000, 10)
         self.sparse = MinkowskiToSparseTensor(False)
         dense_shape = torch.Size([settings.modelconfig.getint("batch_size"), 3, 1, 13, 13])
         self.dense = MinkowskiToDenseTensor(shape=dense_shape)
@@ -28,16 +29,18 @@ class MEConv(ME.MinkowskiNetwork):
     def _make_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
         channels = (128)
-        # for d in range(2):
-        #     layers += [ME.MinkowskiConvolution(in_channel, 128, kernel_size=1, dimension=self.D)]
-        #     ## Ignoring Batching for now
-        #     layers += [ME.MinkowskiReLU(inplace=True)]
-        #     layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
-        #     in_channel = 128
-        layers += [ME.MinkowskiConvolution(3, 128, kernel_size=1, dimension=self.D)]
+        for d in range(2):
+            layers += [ME.MinkowskiConvolution(in_channel, 128, kernel_size=3, dimension=self.D)]
+            ## Ignoring Batching for now
+            # layers += [ME.MinkowskiInstanceNorm(128)]
+            layers += [ME.MinkowskiReLU(inplace=True)]
+            layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
+            in_channel = 128
+        layers += [ME.MinkowskiConvolution(128, 128, kernel_size=3, dimension=self.D)]
             # Ignoring Batching for now
+        # layers += [ME.MinkowskiInstanceNorm(128)]
         layers += [ME.MinkowskiReLU(inplace=True)]
-        layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=1, dimension= self.D)]
+        layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
         # layers += [ME.MinkowskiConvolution(64, 128, kernel_size=1, dimension=self.D)]
 
         in_channel = 128
@@ -97,6 +100,7 @@ class MEConv(ME.MinkowskiNetwork):
         # print(out.shape)
         # print(out.shape)
         # out = self.global_sum(out)
+        # out = self.global_sum_pool(out)
         out = self.classifier(out)
         return out
     

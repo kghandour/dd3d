@@ -11,27 +11,27 @@ import torch.nn as nn
 import math
 import open3d as o3d
 
-def generate_synth(dst_train, num_classes):
-    ''' organize the real dataset '''
-    global indices_class, images_all, labels_all, image_syn, label_syn
+# def generate_synth(dst_train, num_classes):
+#     ''' organize the real dataset '''
+#     global indices_class, images_all, labels_all, image_syn, label_syn
 
-    indices_class = [[] for c in range(num_classes)]
-    images_all = [torch.unsqueeze(dst_train[i][0], dim=0) for i in range(len(dst_train))]
-    labels_all = [dst_train[i][1] for i in range(len(dst_train))]
-    for i, lab in enumerate(labels_all):
-        indices_class[lab].append(i)
-    images_all = torch.cat(images_all, dim=0).to(settings.device)
-    labels_all = torch.tensor(labels_all, dtype=torch.long, device=settings.device)
+#     indices_class = [[] for c in range(num_classes)]
+#     images_all = [torch.unsqueeze(dst_train[i][0], dim=0) for i in range(len(dst_train))]
+#     labels_all = [dst_train[i][1] for i in range(len(dst_train))]
+#     for i, lab in enumerate(labels_all):
+#         indices_class[lab].append(i)
+#     images_all = torch.cat(images_all, dim=0).to(settings.device)
+#     labels_all = torch.tensor(labels_all, dtype=torch.long, device=settings.device)
 
-    for c in range(num_classes):
-        print('class c = %d: %d real images'%(c, len(indices_class[c])))
+#     for c in range(num_classes):
+#         print('class c = %d: %d real images'%(c, len(indices_class[c])))
 
-    for ch in range(channel):
-        print('real images channel %d, mean = %.4f, std = %.4f'%(ch, torch.mean(images_all[:, ch]), torch.std(images_all[:, ch])))
+#     for ch in range(channel):
+#         print('real images channel %d, mean = %.4f, std = %.4f'%(ch, torch.mean(images_all[:, ch]), torch.std(images_all[:, ch])))
 
-    ''' initialize the synthetic data '''
-    image_syn = torch.randn(size=(num_classes*settings.cad_per_class, settings.num_points, 3), dtype=torch.float, requires_grad=True, device=settings.device)
-    label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
+#     ''' initialize the synthetic data '''
+#     image_syn = torch.randn(size=(num_classes*settings.cad_per_class, settings.num_points, 3), dtype=torch.float, requires_grad=True, device=settings.device)
+#     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
 
 def export_pcd(arr, c):
     to_save = np.asarray(arr.cpu())
@@ -72,9 +72,13 @@ def get_images_fixed(c,idx, n): # get random n images from class c
     dataset = Mnist2Dreal(img_real, labels)
     return get_mnist_dataloader(dataset, n)
 
-def generate_synth_dataloader(c):
+def get_syn_tensor(c):
     img_syn = image_syn[c*settings.cad_per_class:(c+1)*settings.cad_per_class]
     lab_syn = torch.ones((settings.cad_per_class,), device=settings.device, dtype=torch.long) * c
+    return img_syn, lab_syn
+
+def generate_synth_dataloader(c):
+    img_syn, lab_syn = get_syn_tensor(c)
     dataset = Mnist2Dsyn(img_syn, lab_syn)
     return get_mnist_dataloader(dataset, settings.cad_per_class)
 
@@ -84,6 +88,7 @@ if __name__ == "__main__":
 
     outer_loop, inner_loop = 1, 1
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset()
+    num_classes = 1
     train_loader = DataLoader(dst_train, batch_size=settings.batch_size, shuffle=True, collate_fn=minkowski_collate_fn)
     network = MEConv(in_channel=3, out_channel=10).to(settings.device)
     total_iterations = settings.distillationconfig.getint("total_iterations")
@@ -94,8 +99,9 @@ if __name__ == "__main__":
     indices_class = [[] for c in range(num_classes)]
     images_all = [torch.unsqueeze(dst_train[i][0], dim=0) for i in range(len(dst_train))]
     labels_all = [dst_train[i][1] for i in range(len(dst_train))]
-    for i, lab in enumerate(labels_all):
-        indices_class[lab].append(i)
+    # for i, lab in enumerate(labels_all):
+    #     indices_class[lab].append(i)
+    indices_class[0].append(0)
     images_all = torch.cat(images_all, dim=0).to(settings.device)
     labels_all = torch.tensor(labels_all, dtype=torch.long, device=settings.device)
 
@@ -117,15 +123,15 @@ if __name__ == "__main__":
     optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.5) # optimizer_img for synthetic data
     optimizer_img.zero_grad()
     net_parameters = list(network.parameters())
-    loss_avg = 0
     log_loss = []
     least_loss = math.inf
     for iteration in range(settings.distillationconfig.getint("total_iterations")):
+        loss_avg = 0
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
-                for batch in get_images(c, settings.modelconfig.getint("batch_size")):
-                # for batch in get_images_fixed(c, 9874, settings.modelconfig.getint("batch_size")):
+                # for batch in get_images(c, settings.modelconfig.getint("batch_size")):
+                for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size")):
                     input = create_input_batch(batch, True, device=settings.device)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
@@ -145,6 +151,7 @@ if __name__ == "__main__":
             loss.backward()
             optimizer_img.step()
             loss_avg += loss.item()
+            torch.cuda.empty_cache()
 
         loss_avg /= (num_classes*outer_loop)
         log_loss.append(loss_avg)
@@ -162,6 +169,7 @@ if __name__ == "__main__":
                 least_loss = loss_value
                 savepath = os.path.join(settings.distillationconfig.get("distillation_checkpoint_dir"), settings.exp_file_name+".pth")
                 settings.log_string('Saving at %s' % savepath)
+                # settings.log_tensorboard_pcd('Point Clouds', get_syn_tensor(0), iteration)
                 state = {
                     'epoch': iteration+1,
                     'least_loss': least_loss,
