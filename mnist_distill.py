@@ -132,7 +132,7 @@ if __name__ == "__main__":
             for c in range(num_classes):
                 # for batch in get_images(c, settings.modelconfig.getint("batch_size")):
                 for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size")):
-                    input = create_input_batch(batch, True, device=settings.device)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
                     output = network(input)
@@ -141,7 +141,7 @@ if __name__ == "__main__":
                     gw_real = torch.autograd.grad(loss_real, net_parameters)
                     gw_real = list((_.detach().clone() for _ in gw_real))
                 for batch in generate_synth_dataloader(c):
-                    input = create_input_batch(batch, True, device=settings.device)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     output = network(input)
                     loss_syn = criterion(output, batch['labels'])
                     gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
