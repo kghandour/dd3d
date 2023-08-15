@@ -8,29 +8,32 @@ from MinkowskiEngine.MinkowskiOps import (
     MinkowskiToDenseTensor
 )
 class MEConv(ME.MinkowskiNetwork):
-    def __init__(self, in_channel, out_channel, embedding_channel=1024, dimension=3):
+    def __init__(self, in_channel, out_channel, embedding_channel=1024, dimension=3, full_minkowski=True):
         ME.MinkowskiNetwork.__init__(self, dimension)
         self.D = dimension ## 2 for img 3 for 3D
         # self.mlp = nn.Sequential(
         #         ME.MinkowskiLinear(3, 128, bias=False),
         #         ME.MinkowskiReLU(),
         #     )
-        # self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
         # self.global_sum_pool = ME.MinkowskiGlobalSumPooling()
         # self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
         # self.global_sum = ME.MinkowskiGlobalSumPooling()
+        self.full_minkowski = full_minkowski
         self.features = self._make_layers(3, out_channel, embedding_channel)
-        self.classifier = nn.Linear(4500, 10)
-        # self.sparse = MinkowskiToSparseTensor(False)
-        self.dense_shape = torch.Size([settings.modelconfig.getint("batch_size"), 1, 5, 30, 30])
+        if(not full_minkowski):
+            self.classifier = nn.Linear(4500, 10)
+            # self.sparse = MinkowskiToSparseTensor(False)
+            self.dense_shape = torch.Size([settings.modelconfig.getint("batch_size"), 1, 5, 30, 30])
         # self.dense = MinkowskiToDenseTensor(shape=dense_shape)
         # self.dense = MinkowskiToDenseTensor()
-        # self.classifier = ME.MinkowskiLinear(128, 10)
+        if(full_minkowski):
+            self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
+            self.classifier = ME.MinkowskiLinear(16, 10)
     def _make_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
         channels = (128)
         layers += [ME.MinkowskiConvolution(in_channel, 128, kernel_size=3, dimension=self.D)]
-        # layers += [ME.MinkowskiInstanceNorm(128)]
+        layers += [ME.MinkowskiInstanceNorm(128)]
         layers += [ME.MinkowskiReLU(inplace=True)]
         layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
         in_channel = 128
@@ -38,12 +41,13 @@ class MEConv(ME.MinkowskiNetwork):
         for d in range(3):
             layers += [ME.MinkowskiConvolution(in_channel, out_channel, kernel_size=3, dimension=self.D)]
             ## Ignoring Batching for now
-            # layers += [ME.MinkowskiInstanceNorm(128)]
+            layers += [ME.MinkowskiInstanceNorm(out_channel)]
             layers += [ME.MinkowskiReLU(inplace=True)]
             layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
             in_channel //= 2
             out_channel //= 2
-        layers += [ME.MinkowskiConvolution(out_channel * 2, 1, kernel_size=1, dimension=self.D)]
+        if(not self.full_minkowski):
+            layers += [ME.MinkowskiConvolution(out_channel * 2, 1, kernel_size=1, dimension=self.D)]
 
         return nn.Sequential(*layers)
     
@@ -72,8 +76,8 @@ class MEConv(ME.MinkowskiNetwork):
         # print("Sparse features shape", out.features.shape)
         # print(out.shape)
         out = self.features(out)
-        out = out.slice(x)
-        out = out.sparse()
+        # out = out.slice(x)
+        # out = out.sparse()
         # print("After convs and pooling:",out.shape)
         # dense_temp = out.dense()[0]
         # print("Dense func",dense_temp.shape)
@@ -100,19 +104,21 @@ class MEConv(ME.MinkowskiNetwork):
         # print(out.C.min(0, keepdim=True).values)
         # print(out.C.max(0, keepdim=True))
         # print(out.F)
-        min_coord, _ = out.C.min(0, keepdim=True)
-        min_coord = min_coord[:, 1:].cpu()
-        # print(min_coord)
-        out = out.dense(shape=self.dense_shape, min_coordinate=min_coord)[0]
-        # print(out.shape)
-        # out = out.features.view(settings.modelconfig.getint("batch_size"), -1)
-        # print(out.shape)
-        out = out.view(settings.modelconfig.getint("batch_size"), -1)
+        if(not self.full_minkowski):
+            min_coord, _ = out.C.min(0, keepdim=True)
+            min_coord = min_coord[:, 1:].cpu()
+            out = out.dense(shape=self.dense_shape, min_coordinate=min_coord)[0]
+            out = out.view(settings.modelconfig.getint("batch_size"), -1)
+            out = self.classifier(out)
+        
+        if(self.full_minkowski):
+            out = self.global_avg_pool(out)
+            out = self.classifier(out).F
         # print(out.shape)
         # print(out.shape)
         # out = self.global_sum(out)
         # out = self.global_sum_pool(out)
-        out = self.classifier(out)
+
         return out
     
 def create_input_batch(batch, is_minknet, device="cuda", quantization_size=0.05):
