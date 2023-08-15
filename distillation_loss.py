@@ -58,7 +58,6 @@ def match_loss(gw_syn, gw_real, dis_metric, device):
             gwr = gw_real[ig]
             gws = gw_syn[ig]
             dis += distance_wb(gwr, gws)
-
     elif dis_metric == "mse":
         gw_real_vec = []
         gw_syn_vec = []
@@ -83,4 +82,5 @@ def match_loss(gw_syn, gw_real, dis_metric, device):
 
     else:
         exit("unknown distance function: %s" % dis_metric)
+    
     return dis

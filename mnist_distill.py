@@ -10,7 +10,7 @@ import numpy as np
 import torch.nn as nn
 import math
 import open3d as o3d
-
+from torchinfo import summary as torchsummary
 # def generate_synth(dst_train, num_classes):
 #     ''' organize the real dataset '''
 #     global indices_class, images_all, labels_all, image_syn, label_syn
@@ -91,6 +91,8 @@ if __name__ == "__main__":
     num_classes = 1
     train_loader = DataLoader(dst_train, batch_size=settings.batch_size, shuffle=True, collate_fn=minkowski_collate_fn)
     network = MEConv(in_channel=3, out_channel=10).to(settings.device)
+    torchsummary(network)
+    settings.log_string(network)
     total_iterations = settings.distillationconfig.getint("total_iterations")
     eval_iteration_pool = [total_iterations-1]
     export_cad_dir = os.path.join(settings.distillationconfig.get("export_dir"), settings.exp_file_name)
