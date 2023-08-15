@@ -36,14 +36,12 @@ from torchinfo import summary as torchsummary
 def export_pcd(arr, c):
     to_save = np.asarray(arr.cpu())
     occ_grid = np.argwhere(to_save==1)
-    pcd = o3d.geometry.PointCloud(
-
-    )
+    pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(occ_grid)
     name = str(c)
     o3d.io.write_point_cloud(
         export_cad_dir
-        + "/"
+        + "/original-"
         + name
         + "_"
         + str(iteration)
@@ -69,7 +67,7 @@ def get_images_fixed(c,idx, n): # get random n images from class c
     # print("Indices for input digit %i, %i",c, idx_shuffle)
     # print(img_real.shape)
     labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
-    dataset = Mnist2Dreal(img_real, labels)
+    dataset = Mnist2Dreal(torch.unsqueeze(img_real, 0), labels)
     return get_mnist_dataloader(dataset, n)
 
 def get_syn_tensor(c):
@@ -98,12 +96,11 @@ if __name__ == "__main__":
     export_cad_dir = os.path.join(settings.distillationconfig.get("export_dir"), settings.exp_file_name)
     os.makedirs(export_cad_dir, exist_ok=True)
 
-    indices_class = [[] for c in range(num_classes)]
+    indices_class = [[] for c in range(10)] ## TODO: CHANGE when SHAPENET
     images_all = [torch.unsqueeze(dst_train[i][0], dim=0) for i in range(len(dst_train))]
     labels_all = [dst_train[i][1] for i in range(len(dst_train))]
-    # for i, lab in enumerate(labels_all):
-    #     indices_class[lab].append(i)
-    indices_class[0].append(0)
+    for i, lab in enumerate(labels_all):
+        indices_class[lab].append(i)
     images_all = torch.cat(images_all, dim=0).to(settings.device)
     labels_all = torch.tensor(labels_all, dtype=torch.long, device=settings.device)
 
@@ -123,6 +120,7 @@ if __name__ == "__main__":
     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
     criterion = nn.CrossEntropyLoss().to(settings.device)
     optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.5) # optimizer_img for synthetic data
+    # optimizer_img = torch.optim.Adam([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), betas=(0.9, 0.999)) # optimizer_img for synthetic data
     optimizer_img.zero_grad()
     net_parameters = list(network.parameters())
     log_loss = []
