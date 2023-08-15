@@ -65,7 +65,7 @@ def get_images_fixed(c,idx, n): # get random n images from class c
     # print(c)
     # print(idx)
     # idx_shuffle = np.random.permutation(indices_class[c])[:n]
-    img_real = images_all[[idx]]
+    img_real = images_all[indices_class[c][idx]]
     # print("Indices for input digit %i, %i",c, idx_shuffle)
     # print(img_real.shape)
     labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
@@ -159,12 +159,12 @@ if __name__ == "__main__":
         log_loss.append(loss_avg)
         # settings.log_string("Iteration "+str(iteration)+" Loss:"+str(loss_avg))
         # settings.log_tensorboard("Distillation/Matched Loss",loss_avg, iteration)
-        if(iteration > 1 and iteration%100 ==0):
+        if(iteration%100 ==0):
             loss_value = sum(log_loss)/len(log_loss)
             settings.log_string("Iteration: "+str(iteration)+" Loss matched is "+ str(loss_value))
             settings.log_tensorboard("Distillation/Matched Loss",loss_value, iteration)
             log_loss = []
-        if(iteration > 1 and iteration%settings.distillationconfig.getint("save_cad_every")==0):
+        if(iteration%settings.distillationconfig.getint("save_cad_every")==0):
             if (loss_value <= least_loss):
                 settings.log_string("Saving Model")
                 settings.log_string("New Loss:"+str(loss_value)+" Old Loss: "+str(least_loss))
