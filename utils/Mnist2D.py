@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from utils.MinkowskiCollate import minkowski_collate_fn
 
-def get_dataset():
+def get_dataset(pixel_val = False):
     channel = 1
     im_size = (28, 28)
     num_classes = 10
@@ -15,8 +15,10 @@ def get_dataset():
 
     data_path = settings.mnistconfig.get("dataset_dir")
     ### Ignoring transform because I want it to be binary
-
-    transform = transforms.Compose([transforms.ToTensor(), ThresholdTransform(thr_255=80)])
+    if(pixel_val):
+      transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
+    else:
+      transform = transforms.Compose([transforms.ToTensor(), ThresholdTransform(thr_255=80)])
     dst_train = datasets.MNIST(data_path, train=True, download=True, transform=transform) # no augmentation
     dst_test = datasets.MNIST(data_path, train=False, download=True, transform=transform)
     class_names = [str(c) for c in range(num_classes)]
@@ -40,35 +42,56 @@ class Mnist2D(datasets.MNIST):
        return super().__len__()
     
 class Mnist2Dreal(Dataset):
-  def __init__(self, images_tensor, labels_tensor):
+  def __init__(self, images_tensor, labels_tensor, pixel_val=False):
     self.images = images_tensor
     self.labels = labels_tensor
+    self.pixel_val = pixel_val
 
   def __getitem__(self, index):
     image = self.images[index]
     label = self.labels[index]
-    occ_grid = torch.argwhere(image==1)[:settings.num_points]
+    if not self.pixel_val:
+      occ_grid = torch.argwhere(image==1)[:settings.num_points]
+      return {
+          "coordinates":occ_grid.to(torch.float32),
+          "features":occ_grid.to(torch.float32),
+          "label": label.to(torch.int64)
+      }
+    flattened = torch.flatten(image)
+    unsqueezed = torch.unsqueeze(flattened, axis=1)
+    occ_grid = torch.argwhere(image)
     return {
-        "coordinates":occ_grid.to(torch.float32),
-        "features":occ_grid.to(torch.float32),
-        "label": label.to(torch.int64)
+      "coordinates":occ_grid.to(torch.float32),
+      "features":unsqueezed.to(torch.float32),
+      "label": label.to(torch.int64)
     }
   
   def __len__(self):
      return self.images.shape[0]
   
 class Mnist2Dsyn(Dataset):
-  def __init__(self, images_tensor, labels_tensor):
+  def __init__(self, images_tensor, labels_tensor, pixel_val=False):
     self.images = images_tensor
     self.labels = labels_tensor
+    self.pixel_val = pixel_val
 
   def __getitem__(self, index):
     image = self.images[index]
     label = self.labels[index]
+    flattened = torch.flatten(image)
+    unsqueezed = torch.unsqueeze(flattened, axis=1)
+    if not self.pixel_val:
+      return {
+          "coordinates":image.to(torch.float32),
+          "features":image.to(torch.float32),
+          "label": label.to(torch.int64)
+      }
+    
+    occ_grid = torch.argwhere(image)
     return {
-        "coordinates":image.to(torch.float32),
-        "features":image.to(torch.float32),
-        "label": label.to(torch.int64)
+      "coordinates":occ_grid.to(torch.float32),
+      "features":unsqueezed.to(torch.float32),
+      "label": label.to(torch.int64)
     }
   
   def __len__(self):

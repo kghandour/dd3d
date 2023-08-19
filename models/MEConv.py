@@ -12,7 +12,7 @@ class MEConv(ME.MinkowskiNetwork):
         ME.MinkowskiNetwork.__init__(self, dimension)
         self.D = dimension
         self.full_minkowski = full_minkowski
-        self.features = self._make_layers(3, out_channel, embedding_channel)
+        self.features = self._make_layers(1, out_channel, embedding_channel)
         if(not full_minkowski):
             self.classifier = nn.Linear(4500, 10)
             self.dense_shape = torch.Size([settings.modelconfig.getint("batch_size"), 1, 5, 30, 30])

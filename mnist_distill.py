@@ -56,7 +56,7 @@ def get_images(c, n): # get random n images from class c
     # print("Indices for input digit %i, %i",c, idx_shuffle)
     # print(img_real.shape)
     labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
-    dataset = Mnist2Dreal(img_real, labels)
+    dataset = Mnist2Dreal(img_real, labels, pixel_val)
     return get_mnist_dataloader(dataset, n)
 
 def get_images_fixed(c,idx, n): # get random n images from class c
@@ -67,7 +67,7 @@ def get_images_fixed(c,idx, n): # get random n images from class c
     # print("Indices for input digit %i, %i",c, idx_shuffle)
     # print(img_real.shape)
     labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
-    dataset = Mnist2Dreal(torch.unsqueeze(img_real, 0), labels)
+    dataset = Mnist2Dreal(torch.unsqueeze(img_real, 0), labels, pixel_val)
     return get_mnist_dataloader(dataset, n)
 
 def get_syn_tensor(c):
@@ -77,15 +77,18 @@ def get_syn_tensor(c):
 
 def generate_synth_dataloader(c):
     img_syn, lab_syn = get_syn_tensor(c)
-    dataset = Mnist2Dsyn(img_syn, lab_syn)
+    dataset = Mnist2Dsyn(img_syn, lab_syn, pixel_val)
     return get_mnist_dataloader(dataset, settings.cad_per_class)
 
 if __name__ == "__main__":
     settings.init()
     global export_cad_dir
+    global pixel_val
+
+    pixel_val = True
 
     outer_loop, inner_loop = 1, 1
-    channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset()
+    channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(pixel_val)
     num_classes = 1
     train_loader = DataLoader(dst_train, batch_size=settings.batch_size, shuffle=True, collate_fn=minkowski_collate_fn)
     network = MEConv(in_channel=3, out_channel=10).to(settings.device)
@@ -112,11 +115,15 @@ if __name__ == "__main__":
 
     ''' initialize the synthetic data '''
     syn_shape = (num_classes*settings.cad_per_class, settings.num_points, 2)
-    image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
+    if(pixel_val):
+        image_syn = torch.randn(size=(num_classes*settings.cad_per_class, 1, im_size[0], im_size[1]), dtype=torch.float, requires_grad=True, device=settings.device)
+    else:
+        image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
+        image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
+
     # while(image_syn.unique(dim=1).shape != syn_shape):
     #     image_syn = torch.randint(0, 28, size= syn_shape, dtype=torch.float, device=settings.device)
     #     settings.log_string("Repeated elements found, regenerating again")
-    image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
     criterion = nn.CrossEntropyLoss().to(settings.device)
     optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.5) # optimizer_img for synthetic data
@@ -181,5 +188,5 @@ if __name__ == "__main__":
                 torch.save(state, savepath)
 
             settings.log_string("Exporting Point Cloud")
-            settings.save_cad(image_syn, export_cad_dir, iteration, normalize=False)
+            # settings.save_cad(image_syn, export_cad_dir, iteration, normalize=False)
 
