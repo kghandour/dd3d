@@ -78,19 +78,17 @@ class Mnist2Dsyn(Dataset):
   def __getitem__(self, index):
     image = self.images[index]
     label = self.labels[index]
-    flattened = torch.flatten(image)
-    unsqueezed = torch.unsqueeze(flattened, axis=1)
     if not self.pixel_val:
       return {
           "coordinates":image.to(torch.float32),
           "features":image.to(torch.float32),
           "label": label.to(torch.int64)
       }
-    
-    occ_grid = torch.argwhere(image)
+    image_reshaped = image.reshape(1, 28, 28)
+    occ_grid = torch.argwhere(image_reshaped)
     return {
       "coordinates":occ_grid.to(torch.float32),
-      "features":unsqueezed.to(torch.float32),
+      "features":image.to(torch.float32),
       "label": label.to(torch.int64)
     }
   

@@ -1,6 +1,6 @@
 from configs import settings
 from distillation_loss import match_loss
-from models.MEConv import MEConv, create_input_batch
+from models.MEConv import MEConv, create_input_batch, MEConvImage
 from utils.Mnist2D import Mnist2Dreal, Mnist2Dsyn, get_dataset, Mnist2D, get_mnist_dataloader
 from torch.utils.data import DataLoader
 from utils.MinkowskiCollate import stack_collate_fn, minkowski_collate_fn
@@ -11,6 +11,8 @@ import torch.nn as nn
 import math
 import open3d as o3d
 from torchinfo import summary as torchsummary
+import copy
+from torchvision.utils import save_image
 # def generate_synth(dst_train, num_classes):
 #     ''' organize the real dataset '''
 #     global indices_class, images_all, labels_all, image_syn, label_syn
@@ -91,7 +93,7 @@ if __name__ == "__main__":
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(pixel_val)
     num_classes = 1
     train_loader = DataLoader(dst_train, batch_size=settings.batch_size, shuffle=True, collate_fn=minkowski_collate_fn)
-    network = MEConv(in_channel=3, out_channel=10).to(settings.device)
+    network = MEConvImage(in_channel=1, out_channel=10).to(settings.device)
     torchsummary(network)
     settings.log_string(network)
     total_iterations = settings.distillationconfig.getint("total_iterations")
@@ -116,7 +118,8 @@ if __name__ == "__main__":
     ''' initialize the synthetic data '''
     syn_shape = (num_classes*settings.cad_per_class, settings.num_points, 2)
     if(pixel_val):
-        image_syn = torch.randn(size=(num_classes*settings.cad_per_class, 1, im_size[0], im_size[1]), dtype=torch.float, requires_grad=True, device=settings.device)
+        # image_syn = torch.randn(size=(num_classes*settings.cad_per_class, 1, im_size[0], im_size[1]), dtype=torch.float, requires_grad=True, device=settings.device)
+        image_syn = torch.randn(size=(num_classes*settings.cad_per_class, im_size[0] * im_size[1], 1), dtype=torch.float, requires_grad=True, device=settings.device)
     else:
         image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
         image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
@@ -188,5 +191,15 @@ if __name__ == "__main__":
                 torch.save(state, savepath)
 
             settings.log_string("Exporting Point Cloud")
-            # settings.save_cad(image_syn, export_cad_dir, iteration, normalize=False)
+            if(not pixel_val):
+                settings.save_cad(image_syn, export_cad_dir, iteration, normalize=False, pixel_val=pixel_val)
+            else:
+                image_syn_vis = copy.deepcopy(image_syn.detach().cpu())
+                for ch in range(channel):
+                    image_syn_vis[:, ch] = image_syn_vis[:, ch] * std[ch] + mean[ch]
+                image_syn_vis[image_syn_vis<0] = 0.0
+                image_syn_vis[image_syn_vis>1] = 1.0
+                reshaped = image_syn.reshape(num_classes*settings.cad_per_class, 28, 28)
+                save_name = os.path.join(export_cad_dir, 'vis_iter%d.png'%(iteration))
+                save_image(reshaped, save_name, nrow=settings.cad_per_class)
 
