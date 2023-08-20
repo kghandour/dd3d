@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     outer_loop, inner_loop = 1, 1
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(pixel_val)
-    num_classes = 1
+    # num_classes = 1
     train_loader = DataLoader(dst_train, batch_size=settings.batch_size, shuffle=True, collate_fn=minkowski_collate_fn)
     network = MEConvImage(in_channel=1, out_channel=10).to(settings.device)
     torchsummary(network)
@@ -140,8 +140,8 @@ if __name__ == "__main__":
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
-                # for batch in get_images(c, settings.modelconfig.getint("batch_size")):
-                for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size")):
+                for batch in get_images(c, settings.modelconfig.getint("batch_size")):
+                # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size")):
                     input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
@@ -199,7 +199,7 @@ if __name__ == "__main__":
                     image_syn_vis[:, ch] = image_syn_vis[:, ch] * std[ch] + mean[ch]
                 image_syn_vis[image_syn_vis<0] = 0.0
                 image_syn_vis[image_syn_vis>1] = 1.0
-                reshaped = image_syn.reshape(num_classes*settings.cad_per_class, 28, 28)
+                reshaped = image_syn.reshape(num_classes, settings.cad_per_class, 28, 28)
                 save_name = os.path.join(export_cad_dir, 'vis_iter%d.png'%(iteration))
                 save_image(reshaped, save_name, nrow=settings.cad_per_class)
 
