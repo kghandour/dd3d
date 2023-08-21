@@ -135,8 +135,10 @@ if __name__ == "__main__":
     net_parameters = list(network.parameters())
     log_loss = []
     least_loss = math.inf
+    loss_avg = 0
     for iteration in range(settings.distillationconfig.getint("total_iterations")):
-        loss_avg = 0
+        if(num_classes*outer_loop==1):
+            loss_avg = 0
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
