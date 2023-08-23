@@ -15,10 +15,10 @@ class MEConv(ME.MinkowskiNetwork):
         self.features = self._make_layers(1, out_channel, embedding_channel)
         if(not full_minkowski):
             self.classifier = nn.Linear(4500, 10)
-            self.dense_shape = torch.Size([settings.modelconfig.getint("batch_size"), 1, 5, 30, 30])
+            # self.dense_shape = torch.Size([settings.modelconfig.getint("batch_size"), 1, 5, 30, 30])
         if(full_minkowski):
             self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
-            self.classifier = ME.MinkowskiLinear(16, 10)
+            self.classifier = ME.MinkowskiLinear(128, 10)
     def _make_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
         channels = (128)
@@ -89,12 +89,13 @@ class MEConvImage(ME.MinkowskiNetwork):
         self.D = dimension
         self.full_minkowski = full_minkowski
         self.features = self._make_equal_layers(in_channel, out_channel, embedding_channel)
+        self.weight_initialization()
         if(not full_minkowski):
             self.classifier = nn.Linear(100352, 10)
-            self.dense_shape = torch.Size([settings.modelconfig.getint("batch_size"), 128, 1, 28, 28])
+            # self.dense_shape = torch.Size([settings.modelconfig.getint("batch_size"), 128, 1, 28, 28])
         if(full_minkowski):
             self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
-            self.classifier = ME.MinkowskiLinear(16, 10)
+            self.classifier = ME.MinkowskiLinear(128, 10)
     def _make_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
         channels = (128)
@@ -118,15 +119,15 @@ class MEConvImage(ME.MinkowskiNetwork):
 
     def _make_equal_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
-        for d in range(3):
+        for d in range(2):
             layers += [ME.MinkowskiConvolution(in_channel, 128, kernel_size=3, dimension=self.D)]
             layers += [ME.MinkowskiInstanceNorm(128)]
             layers += [ME.MinkowskiReLU(inplace=True)]
             layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
             in_channel = 128
         if(not self.full_minkowski):
-            pass
-            # layers += [ME.MinkowskiConvolution(in_channel, 1, kernel_size=1, dimension=self.D)]
+            # pass
+            layers += [ME.MinkowskiConvolution(in_channel, 128, kernel_size=1, dimension=self.D)]
 
         return nn.Sequential(*layers)
     
@@ -148,10 +149,12 @@ class MEConvImage(ME.MinkowskiNetwork):
         out = x.sparse()
         out = self.features(out)
         if(not self.full_minkowski):
+            dense_shape = torch.Size([int(torch.max(x.C, dim=0).values[0].item())+1, 1, 1, 28, 28])
             min_coord, _ = out.C.min(0, keepdim=True)
             min_coord = min_coord[:, 1:].cpu()
-            out = out.dense(shape=self.dense_shape, min_coordinate=min_coord)[0]
-            out = out.view(settings.modelconfig.getint("batch_size"), -1)
+            out = out.dense(shape=dense_shape, min_coordinate=min_coord)[0]
+            out = out.view(-1, 100352)
+            # out = out.F.reshape(-1, 2048)
             out = self.classifier(out)
         
         if(self.full_minkowski):

@@ -13,6 +13,7 @@ import open3d as o3d
 from torchinfo import summary as torchsummary
 import copy
 from torchvision.utils import save_image
+import torch.nn.functional as F
 # def generate_synth(dst_train, num_classes):
 #     ''' organize the real dataset '''
 #     global indices_class, images_all, labels_all, image_syn, label_syn
@@ -91,7 +92,7 @@ if __name__ == "__main__":
 
     outer_loop, inner_loop = 1, 1
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(pixel_val)
-    # num_classes = 1
+    num_classes = 10
     train_loader = DataLoader(dst_train, batch_size=settings.batch_size, shuffle=True, collate_fn=minkowski_collate_fn)
     network = MEConvImage(in_channel=1, out_channel=10).to(settings.device)
     torchsummary(network)
@@ -118,8 +119,9 @@ if __name__ == "__main__":
     ''' initialize the synthetic data '''
     syn_shape = (num_classes*settings.cad_per_class, settings.num_points, 2)
     if(pixel_val):
-        # image_syn = torch.randn(size=(num_classes*settings.cad_per_class, 1, im_size[0], im_size[1]), dtype=torch.float, requires_grad=True, device=settings.device)
-        image_syn = torch.randn(size=(num_classes*settings.cad_per_class, im_size[0] * im_size[1], 1), dtype=torch.float, requires_grad=True, device=settings.device)
+        image_syn = torch.randn(size=(num_classes*settings.cad_per_class, 1, im_size[0], im_size[1]), dtype=torch.float, device=settings.device, requires_grad=True)
+        # image_syn = F.normalize(image_syn).requires_grad_()
+        # image_syn = torch.randn(size=(num_classes*settings.cad_per_class, im_size[0] * im_size[1], 1), dtype=torch.float, requires_grad=True, device=settings.device)
     else:
         image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
         image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
@@ -129,16 +131,16 @@ if __name__ == "__main__":
     #     settings.log_string("Repeated elements found, regenerating again")
     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
     criterion = nn.CrossEntropyLoss().to(settings.device)
-    optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.5) # optimizer_img for synthetic data
+    optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.9) # optimizer_img for synthetic data
     # optimizer_img = torch.optim.Adam([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), betas=(0.9, 0.999)) # optimizer_img for synthetic data
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer_img, T_max=settings.distillationconfig.getint("total_iterations"))
     optimizer_img.zero_grad()
     net_parameters = list(network.parameters())
     log_loss = []
     least_loss = math.inf
     loss_avg = 0
     for iteration in range(settings.distillationconfig.getint("total_iterations")):
-        if(num_classes*outer_loop==1):
-            loss_avg = 0
+        loss_avg = 0
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
@@ -157,13 +159,13 @@ if __name__ == "__main__":
                     output = network(input)
                     loss_syn = criterion(output, batch['labels'])
                     gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
-                
                 loss += match_loss(gw_syn, gw_real, settings.modelconfig.get("dist_opt"), settings.device)
             optimizer_img.zero_grad()
             loss.backward()
             optimizer_img.step()
+            # scheduler.step()
             loss_avg += loss.item()
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
 
         loss_avg /= (num_classes*outer_loop)
         log_loss.append(loss_avg)
@@ -201,7 +203,7 @@ if __name__ == "__main__":
                     image_syn_vis[:, ch] = image_syn_vis[:, ch] * std[ch] + mean[ch]
                 image_syn_vis[image_syn_vis<0] = 0.0
                 image_syn_vis[image_syn_vis>1] = 1.0
-                reshaped = image_syn.reshape(num_classes, settings.cad_per_class, 28, 28)
+                # reshaped = image_syn.reshape(num_classes, settings.cad_per_class, 28, 28)
                 save_name = os.path.join(export_cad_dir, 'vis_iter%d.png'%(iteration))
-                save_image(reshaped, save_name, nrow=settings.cad_per_class)
+                save_image(image_syn_vis, save_name, nrow=settings.cad_per_class)
 

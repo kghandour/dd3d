@@ -84,11 +84,11 @@ class Mnist2Dsyn(Dataset):
           "features":image.to(torch.float32),
           "label": label.to(torch.int64)
       }
-    image_reshaped = image.reshape(1, 28, 28)
-    occ_grid = torch.argwhere(image_reshaped)
+    flattened = image.reshape(-1, 1)
+    occ_grid = torch.argwhere(image)
     return {
       "coordinates":occ_grid.to(torch.float32),
-      "features":image.to(torch.float32),
+      "features":flattened.to(torch.float32),
       "label": label.to(torch.int64)
     }
   
