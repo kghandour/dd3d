@@ -88,13 +88,15 @@ if __name__ == "__main__":
     global export_cad_dir
     global pixel_val
 
-    pixel_val = True
+    pixel_val = False
 
     outer_loop, inner_loop = 1, 1
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(pixel_val)
-    num_classes = 10
+    num_classes = 1
     train_loader = DataLoader(dst_train, batch_size=settings.batch_size, shuffle=True, collate_fn=minkowski_collate_fn)
-    network = MEConvImage(in_channel=1, out_channel=10).to(settings.device)
+    if(pixel_val): in_c = 1 
+    else: in_c = 3
+    network = MEConvImage(in_channel=in_c, out_channel=10).to(settings.device)
     torchsummary(network)
     settings.log_string(network)
     total_iterations = settings.distillationconfig.getint("total_iterations")
@@ -141,11 +143,14 @@ if __name__ == "__main__":
     loss_avg = 0
     for iteration in range(settings.distillationconfig.getint("total_iterations")):
         loss_avg = 0
+        image_syn.requires_grad_(False)
+        image_syn[:,:,0] = 0
+        image_syn.requires_grad_()
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
-                for batch in get_images(c, settings.modelconfig.getint("batch_size")):
-                # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size")):
+                # for batch in get_images(c, settings.modelconfig.getint("batch_size")):
+                for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size")):
                     input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
@@ -196,7 +201,7 @@ if __name__ == "__main__":
 
             settings.log_string("Exporting Point Cloud")
             if(not pixel_val):
-                settings.save_cad(image_syn, export_cad_dir, iteration, normalize=False, pixel_val=pixel_val)
+                settings.save_cad(image_syn, export_cad_dir, iteration, normalize=False)
             else:
                 image_syn_vis = copy.deepcopy(image_syn.detach().cpu())
                 for ch in range(channel):
