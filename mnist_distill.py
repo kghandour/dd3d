@@ -14,6 +14,7 @@ from torchinfo import summary as torchsummary
 import copy
 from torchvision.utils import save_image
 import torch.nn.functional as F
+import time
 # def generate_synth(dst_train, num_classes):
 #     ''' organize the real dataset '''
 #     global indices_class, images_all, labels_all, image_syn, label_syn
@@ -36,15 +37,18 @@ import torch.nn.functional as F
 #     image_syn = torch.randn(size=(num_classes*settings.cad_per_class, settings.num_points, 3), dtype=torch.float, requires_grad=True, device=settings.device)
 #     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
 
-def export_pcd(arr, c):
-    to_save = np.asarray(arr.cpu())
-    occ_grid = np.argwhere(to_save==1)
+def export_pcd(arr, c, custom_name="orig"):
+    to_save = np.asarray(arr.cpu()[0])
+    # print(to_save)
+    # occ_grid = np.argwhere(to_save==1)
     pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(occ_grid)
+    pcd.points = o3d.utility.Vector3dVector(to_save)
     name = str(c)
     o3d.io.write_point_cloud(
         export_cad_dir
         + "/original-"
+        + custom_name
+        +"-"
         + name
         + "_"
         + str(iteration)
@@ -67,10 +71,18 @@ def get_images_fixed(c,idx, n): # get random n images from class c
     # print(idx)
     # idx_shuffle = np.random.permutation(indices_class[c])[:n]
     img_real = images_all[indices_class[c][idx]]
+    print(img_real.shape)
     # print("Indices for input digit %i, %i",c, idx_shuffle)
     # print(img_real.shape)
     labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
     dataset = Mnist2Dreal(torch.unsqueeze(img_real, 0), labels, pixel_val)
+    return get_mnist_dataloader(dataset, n)
+
+def get_1_pt_fixed(c, n):
+    img_real = torch.tensor([[[0, 14, 14]]], device=settings.device)
+    labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
+    dataset = Mnist2Dreal(img_real, labels, pixel_val, fixed_pt=True)
+    # export_pcd(img_real, c, custom_name="1pt")
     return get_mnist_dataloader(dataset, n)
 
 def get_syn_tensor(c):
@@ -88,7 +100,8 @@ if __name__ == "__main__":
     global export_cad_dir
     global pixel_val
 
-    pixel_val = False
+    pixel_val = False 
+    torch.random.manual_seed(int(time.time() * 1000) % 100000)
 
     outer_loop, inner_loop = 1, 1
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(pixel_val)
@@ -119,14 +132,14 @@ if __name__ == "__main__":
         print('real images channel %d, mean = %.4f, std = %.4f'%(ch, torch.mean(images_all[:, ch]), torch.std(images_all[:, ch])))
 
     ''' initialize the synthetic data '''
-    syn_shape = (num_classes*settings.cad_per_class, settings.num_points, 2)
+    syn_shape = (num_classes*settings.cad_per_class, settings.num_points, 3)
     if(pixel_val):
         image_syn = torch.randn(size=(num_classes*settings.cad_per_class, 1, im_size[0], im_size[1]), dtype=torch.float, device=settings.device, requires_grad=True)
         # image_syn = F.normalize(image_syn).requires_grad_()
         # image_syn = torch.randn(size=(num_classes*settings.cad_per_class, im_size[0] * im_size[1], 1), dtype=torch.float, requires_grad=True, device=settings.device)
     else:
         image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
-        image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
+        # image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
 
     # while(image_syn.unique(dim=1).shape != syn_shape):
     #     image_syn = torch.randint(0, 28, size= syn_shape, dtype=torch.float, device=settings.device)
@@ -143,14 +156,18 @@ if __name__ == "__main__":
     loss_avg = 0
     for iteration in range(settings.distillationconfig.getint("total_iterations")):
         loss_avg = 0
-        image_syn.requires_grad_(False)
-        image_syn[:,:,0] = 0
-        image_syn.requires_grad_()
+        if(not pixel_val):
+            image_syn.requires_grad_(False)
+            image_syn[image_syn<0]=0
+            image_syn[image_syn>27]=27
+            image_syn[:,:,0] = 0
+            image_syn.requires_grad_()
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
                 # for batch in get_images(c, settings.modelconfig.getint("batch_size")):
-                for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size")):
+                # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size")):
+                for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size")):
                     input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
@@ -167,6 +184,7 @@ if __name__ == "__main__":
                 loss += match_loss(gw_syn, gw_real, settings.modelconfig.get("dist_opt"), settings.device)
             optimizer_img.zero_grad()
             loss.backward()
+            # nn.utils.clip_grad_norm_([image_syn, ], 1.0)
             optimizer_img.step()
             # scheduler.step()
             loss_avg += loss.item()

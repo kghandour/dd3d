@@ -119,7 +119,7 @@ class MEConvImage(ME.MinkowskiNetwork):
 
     def _make_equal_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
-        for d in range(2):
+        for d in range(3):
             layers += [ME.MinkowskiConvolution(in_channel, 128, kernel_size=3, dimension=self.D)]
             layers += [ME.MinkowskiInstanceNorm(128)]
             layers += [ME.MinkowskiReLU(inplace=True)]

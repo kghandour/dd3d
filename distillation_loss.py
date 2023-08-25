@@ -49,6 +49,28 @@ def distance_wb(gwr, gws):
     dis = dis_weight
     return dis
 
+def distance_mse(gwr, gws):
+    shape = gwr.shape
+    if(len(shape) == 5): #conv, out*in*1*points
+        gwr = gwr.reshape(shape[0], shape[1] * shape[2] * shape[3] * shape[4])
+        gws = gws.reshape(shape[0], shape[1] * shape[2] * shape[3] * shape[4])   
+    if len(shape) == 4:  # conv, out*in*h*w
+        gwr = gwr.reshape(shape[0], shape[1] * shape[2] * shape[3])
+        gws = gws.reshape(shape[0], shape[1] * shape[2] * shape[3])
+    elif len(shape) == 3:  # layernorm, C*h*w
+        gwr = gwr.reshape(shape[0], shape[1] * shape[2])
+        gws = gws.reshape(shape[0], shape[1] * shape[2])
+    elif len(shape) == 2:  # linear, out*in
+        tmp = "do nothing"
+    elif len(shape) == 1:  # batchnorm/instancenorm, C; groupnorm x, bias
+        gwr = gwr.reshape(1, shape[0])
+        gws = gws.reshape(1, shape[0])
+        # return torch.tensor(0, dtype=torch.float, device=gwr.device)
+
+    dis_weight = torch.sum((gwr - gws) ** 2)
+    dis = dis_weight
+    return dis
+
 def match_loss(gw_syn, gw_real, dis_metric, device):
     dis = torch.tensor(0.0).to(device)
     count_length = [0,0,0,0,0]
@@ -58,6 +80,12 @@ def match_loss(gw_syn, gw_real, dis_metric, device):
             gwr = gw_real[ig]
             gws = gw_syn[ig]
             dis += distance_wb(gwr, gws)
+    elif dis_metric == "modmse":
+        for ig in range(len(gw_real)):
+            count_length[len(gw_real[ig].shape)]+=1
+            gwr = gw_real[ig]
+            gws = gw_syn[ig]
+            dis += distance_mse(gwr, gws)
     elif dis_metric == "mse":
         gw_real_vec = []
         gw_syn_vec = []

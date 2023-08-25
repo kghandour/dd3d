@@ -42,21 +42,28 @@ class Mnist2D(datasets.MNIST):
        return super().__len__()
     
 class Mnist2Dreal(Dataset):
-  def __init__(self, images_tensor, labels_tensor, pixel_val=False):
+  def __init__(self, images_tensor, labels_tensor, pixel_val=False, fixed_pt=False):
     self.images = images_tensor
     self.labels = labels_tensor
     self.pixel_val = pixel_val
+    self.fixed_pt = fixed_pt
 
   def __getitem__(self, index):
     image = self.images[index]
     label = self.labels[index]
-    if not self.pixel_val:
+    if not self.pixel_val and not self.fixed_pt:
       occ_grid = torch.argwhere(image==1)[:settings.num_points]
       return {
           "coordinates":occ_grid.to(torch.float32),
           "features":occ_grid.to(torch.float32),
           "label": label.to(torch.int64)
       }
+    elif self.fixed_pt and not self.pixel_val:
+      return {
+          "coordinates": image.to(torch.float32),
+          "features":image.to(torch.float32),
+          "label": label.to(torch.int64)
+      } 
     flattened = torch.flatten(image)
     unsqueezed = torch.unsqueeze(flattened, axis=1)
     occ_grid = torch.argwhere(image)
