@@ -1,6 +1,6 @@
 from configs import settings
 from distillation_loss import match_loss
-from models.MEConv import MEConv, create_input_batch, MEConvImage
+from models.MEConv import MEConv, create_input_batch, MEConvImage, MEConvExp
 from utils.Mnist2D import Mnist2Dreal, Mnist2Dsyn, get_dataset, Mnist2D, get_mnist_dataloader
 from torch.utils.data import DataLoader
 from utils.MinkowskiCollate import stack_collate_fn, minkowski_collate_fn
@@ -15,6 +15,7 @@ import copy
 from torchvision.utils import save_image
 import torch.nn.functional as F
 import time
+
 # def generate_synth(dst_train, num_classes):
 #     ''' organize the real dataset '''
 #     global indices_class, images_all, labels_all, image_syn, label_syn
@@ -78,11 +79,13 @@ def get_images_fixed(c,idx, n): # get random n images from class c
     dataset = Mnist2Dreal(torch.unsqueeze(img_real, 0), labels, pixel_val)
     return get_mnist_dataloader(dataset, n)
 
-def get_1_pt_fixed(c, n):
-    img_real = torch.tensor([[[0, 14, 14]]], device=settings.device)
+def get_1_pt_fixed(c, n, export_cad_once):
+    # img_real = torch.tensor([[[0, 1, 1]]], device=settings.device)
+    img_real = torch.tensor([[[0, 1, 1], [0, 4, 4]]], device=settings.device)
     labels = torch.ones((img_real.shape[0],), device=settings.device, dtype=torch.long) * c
     dataset = Mnist2Dreal(img_real, labels, pixel_val, fixed_pt=True)
-    # export_pcd(img_real, c, custom_name="1pt")
+    if(export_cad_once):
+        export_pcd(img_real, c, custom_name="2pt")
     return get_mnist_dataloader(dataset, n)
 
 def get_syn_tensor(c):
@@ -101,6 +104,7 @@ if __name__ == "__main__":
     global pixel_val
 
     pixel_val = False 
+    export_cad_once = True
     torch.random.manual_seed(int(time.time() * 1000) % 100000)
 
     outer_loop, inner_loop = 1, 1
@@ -109,7 +113,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(dst_train, batch_size=settings.batch_size, shuffle=True, collate_fn=minkowski_collate_fn)
     if(pixel_val): in_c = 1 
     else: in_c = 3
-    network = MEConvImage(in_channel=in_c, out_channel=10).to(settings.device)
+    network = MEConvExp(in_channel=in_c, out_channel=10).to(settings.device)
     torchsummary(network)
     settings.log_string(network)
     total_iterations = settings.distillationconfig.getint("total_iterations")
@@ -139,6 +143,7 @@ if __name__ == "__main__":
         # image_syn = torch.randn(size=(num_classes*settings.cad_per_class, im_size[0] * im_size[1], 1), dtype=torch.float, requires_grad=True, device=settings.device)
     else:
         image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
+        # image_syn = torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
         # image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
 
     # while(image_syn.unique(dim=1).shape != syn_shape):
@@ -167,8 +172,9 @@ if __name__ == "__main__":
             for c in range(num_classes):
                 # for batch in get_images(c, settings.modelconfig.getint("batch_size")):
                 # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size")):
-                for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size")):
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size"), export_cad_once):
+                    export_cad_once = False
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.5)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
                     output = network(input)
@@ -176,11 +182,17 @@ if __name__ == "__main__":
                     loss_real = criterion(output, batch['labels'])
                     gw_real = torch.autograd.grad(loss_real, net_parameters)
                     gw_real = list((_.detach().clone() for _ in gw_real))
+                    # print(input)
+                    # print(output)
+                    # print(loss_real)
                 for batch in generate_synth_dataloader(c):
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.5)
                     output = network(input)
                     loss_syn = criterion(output, batch['labels'])
                     gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
+                    # print(input)
+                    # print(output)
+                    # print(loss_syn)
                 loss += match_loss(gw_syn, gw_real, settings.modelconfig.get("dist_opt"), settings.device)
             optimizer_img.zero_grad()
             loss.backward()
