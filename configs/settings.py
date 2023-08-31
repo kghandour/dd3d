@@ -63,6 +63,10 @@ def log_tensorboard(tag, scalar_value, global_step):
     if(DEBUG):
         summary_writer.add_scalar(tag=tag, scalar_value=scalar_value, global_step=global_step)
 
+def log_tensorboard_str(tag, text, global_step):
+    if(DEBUG):
+        summary_writer.add_text(tag, text, global_step)
+
 def log_tensorboard_pcd(tag, input, global_step):
     if(DEBUG):
         (img_syn, lab_syn) = input
@@ -176,9 +180,9 @@ def init():
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
         log_string("INI Config Reading [DEFAULT] section:" + str(dict(defconfig)))
-        tensorboard_path = os.path.join(logging_folder_name, defconfig.get("tensorboard_folder_name"))
-        os.makedirs(tensorboard_path, exist_ok=True)
-        summary_writer = SummaryWriter(log_dir=tensorboard_path)
+        # tensorboard_path = os.path.join(logging_folder_name, defconfig.get("tensorboard_folder_name"))
+        # os.makedirs(tensorboard_path, exist_ok=True)
+        summary_writer = SummaryWriter(log_dir=logging_folder_name)
 
 def get_class_name_from_id(val):
     return [k for k, v in CLASS_NAME_TO_ID.items() if v == val][0]

@@ -106,7 +106,9 @@ def get_1_pt_fixed(c, n, export_cad_once):
     # img_real = torch.tensor([[[0, 10, 10], [0, 20, 20], [0, 10, 20]]], device=settings.device) # Not working
     # img_real = torch.tensor([[[0, 10, 10], [0, 20, 20], [0, 10, 20]]], device=settings.device) # Not working
     # img_real = torch.tensor([[[0, 0.5, 0.5]]], device=settings.device) #  working
-    img_real = torch.tensor([[[0, 0.5, 0.5]]], device=settings.device) #
+    # img_real = torch.tensor([[[0, 20.0, 20.0]]], device=settings.device) # Working with S: 0.1 
+    img_real = torch.tensor([[[0, 3, 3], [0.0, 6, 6]]], device=settings.device) # Working with S: 0.1 
+
 
     # img_real = torch.tensor([[[0, 3, 3]]], device=settings.device)
 
@@ -181,7 +183,7 @@ if __name__ == "__main__":
         # image_syn = torch.tensor([[[0,1,1], [0, 27, 27], [0,15,15]]], dtype=torch.float, device=settings.device) # NOT Working
         # image_syn = torch.tensor([[[0,1,1], [0, 2, 2], [0,1,2]]], dtype=torch.float, device=settings.device) # NOT Working
         # image_syn = torch.tensor([[[0,0.1,0.1]]], dtype=torch.float, device=settings.device) # Working
-        image_syn = torch.tensor([[[0,0.1,0.1]]], dtype=torch.float, device=settings.device) # 
+        image_syn = torch.tensor([[[0,1,1], [0, 9, 9]]], dtype=torch.float, device=settings.device) # 
 
 
 
@@ -193,7 +195,7 @@ if __name__ == "__main__":
     #     settings.log_string("Repeated elements found, regenerating again")
     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
     criterion = nn.CrossEntropyLoss().to(settings.device)
-    optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.9) # optimizer_img for synthetic data
+    optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.5) # optimizer_img for synthetic data
     # optimizer_img = torch.optim.Adam([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), betas=(0.9, 0.999)) # optimizer_img for synthetic data
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer_img, T_max=settings.distillationconfig.getint("total_iterations"))
     optimizer_img.zero_grad()
@@ -217,7 +219,7 @@ if __name__ == "__main__":
                 # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size"), export_cad_once):
                 for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size"), export_cad_once):
                     export_cad_once = False
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.05)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     if(iteration%100 == 0): settings.log_string(input)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
@@ -225,14 +227,15 @@ if __name__ == "__main__":
                     # print(output.shape)
                     loss_real = criterion(output, batch['labels'])
                     tag_name = "Distillation/Real Digit:"+str(c)+" Loss"
-                    if(iteration %100 == 0): settings.log_tensorboard(tag_name, loss_real.item(), iteration)
+                    if(iteration %100 == 0): 
+                        settings.log_tensorboard(tag_name, loss_real.item(), iteration)
                     gw_real = torch.autograd.grad(loss_real, net_parameters)
                     gw_real = list((_.detach().clone() for _ in gw_real))
                     # print(input)
                     # print(output)
                     # print(loss_real)
                 for batch in generate_synth_dataloader(c):
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.05)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     if(iteration%100 == 0): settings.log_string(input)
                     output = network(input)
                     loss_syn = criterion(output, batch['labels'])
@@ -245,8 +248,12 @@ if __name__ == "__main__":
                 loss += match_loss(gw_syn, gw_real, settings.modelconfig.get("dist_opt"), settings.device)
             optimizer_img.zero_grad()
             loss.backward()
+            if(iteration%100==0): settings.log_tensorboard_str('Image Syn grad:', str(image_syn.grad), iteration)
             # nn.utils.clip_grad_norm_([image_syn, ], 1.0)
             optimizer_img.step()
+            if(iteration%100==0): settings.log_tensorboard_str('Image Syn new point:', str(image_syn), iteration)
+            # print(image_syn)
+            # exit()
             # scheduler.step()
             loss_avg += loss.item()
             # torch.cuda.empty_cache()
