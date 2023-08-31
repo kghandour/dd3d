@@ -102,8 +102,11 @@ def get_images_fixed(c,idx, n, export_cad_once): # get random n images from clas
 
 def get_1_pt_fixed(c, n, export_cad_once):
     # img_real = torch.tensor([[[0, 1, 1]]], device=settings.device)
-    img_real = torch.tensor([[[0, 3, 3], [0, 6, 6], [0, 3, 6]]], device=settings.device) # Working config 
+    # img_real = torch.tensor([[[0, 3, 3], [0, 6, 6], [0, 3, 6]]], device=settings.device) # Working config 
     # img_real = torch.tensor([[[0, 10, 10], [0, 20, 20], [0, 10, 20]]], device=settings.device) # Not working
+    # img_real = torch.tensor([[[0, 10, 10], [0, 20, 20], [0, 10, 20]]], device=settings.device) # Not working
+    # img_real = torch.tensor([[[0, 0.5, 0.5]]], device=settings.device) #  working
+    img_real = torch.tensor([[[0, 0.5, 0.5]]], device=settings.device) #
 
     # img_real = torch.tensor([[[0, 3, 3]]], device=settings.device)
 
@@ -131,6 +134,7 @@ if __name__ == "__main__":
     pixel_val = False 
     export_cad_once = True
     minkpyt = False
+    normalized = True
     torch.random.manual_seed(int(time.time() * 1000) % 100000)
 
     outer_loop, inner_loop = 1, 1
@@ -147,7 +151,7 @@ if __name__ == "__main__":
     settings.log_string(network)
     total_iterations = settings.distillationconfig.getint("total_iterations")
     eval_iteration_pool = [total_iterations-1]
-    export_cad_dir = os.path.join(settings.distillationconfig.get("export_dir"), settings.exp_file_name)
+    export_cad_dir = os.path.join(settings.logging_folder_name, settings.distillationconfig.get("export_folder_name"))
     os.makedirs(export_cad_dir, exist_ok=True)
 
     indices_class = [[] for c in range(10)] ## TODO: CHANGE when SHAPENET
@@ -173,8 +177,12 @@ if __name__ == "__main__":
     else:
         # image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device) 
         # image_syn = torch.tensor([[[0,0,0], [0,10,10]]], dtype=torch.float, device=settings.device)
-        image_syn = torch.tensor([[[0,1,1], [0, 3, 9], [0,9,9]]], dtype=torch.float, device=settings.device) # Working configuration
+        # image_syn = torch.tensor([[[0,1,1], [0, 3, 9], [0,9,9]]], dtype=torch.float, device=settings.device) # Working configuration
         # image_syn = torch.tensor([[[0,1,1], [0, 27, 27], [0,15,15]]], dtype=torch.float, device=settings.device) # NOT Working
+        # image_syn = torch.tensor([[[0,1,1], [0, 2, 2], [0,1,2]]], dtype=torch.float, device=settings.device) # NOT Working
+        # image_syn = torch.tensor([[[0,0.1,0.1]]], dtype=torch.float, device=settings.device) # Working
+        image_syn = torch.tensor([[[0,0.1,0.1]]], dtype=torch.float, device=settings.device) # 
+
 
 
         # image_syn = torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
@@ -197,8 +205,9 @@ if __name__ == "__main__":
         loss_avg = 0
         if(not pixel_val):
             image_syn.requires_grad_(False)
-            image_syn[image_syn<0]=0
-            image_syn[image_syn>27]=27
+            if(not normalized):
+                image_syn[image_syn<0]=0
+                image_syn[image_syn>27]=27
             image_syn[:,:,0] = 0
             image_syn.requires_grad_()
         for ol in range(outer_loop):
@@ -208,23 +217,27 @@ if __name__ == "__main__":
                 # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size"), export_cad_once):
                 for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size"), export_cad_once):
                     export_cad_once = False
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.05)
                     if(iteration%100 == 0): settings.log_string(input)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
                     output = network(input)
                     # print(output.shape)
                     loss_real = criterion(output, batch['labels'])
+                    tag_name = "Distillation/Real Digit:"+str(c)+" Loss"
+                    if(iteration %100 == 0): settings.log_tensorboard(tag_name, loss_real.item(), iteration)
                     gw_real = torch.autograd.grad(loss_real, net_parameters)
                     gw_real = list((_.detach().clone() for _ in gw_real))
                     # print(input)
                     # print(output)
                     # print(loss_real)
                 for batch in generate_synth_dataloader(c):
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.05)
                     if(iteration%100 == 0): settings.log_string(input)
                     output = network(input)
                     loss_syn = criterion(output, batch['labels'])
+                    tag_name = "Distillation/Synthetic Digit:"+str(c)+" Loss"
+                    if(iteration %100 == 0): settings.log_tensorboard(tag_name, loss_syn.item(), iteration)
                     gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
                     # print(input)
                     # print(output)

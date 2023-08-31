@@ -125,6 +125,7 @@ def init():
     global cad_per_class
     global num_points
     global batch_size
+    global logging_folder_name
 
     cad_paths_all = []
     labels_all = []
@@ -158,6 +159,8 @@ def init():
     num_workers = defconfig.getint("num_workers")
     experiment_name = args.exp if args.exp is not None else defconfig.get("experiment_name")
     exp_file_name = date_time+"_"+experiment_name
+    logging_folder_name = os.path.join(defconfig.get("logging_parent"), exp_file_name)
+    os.makedirs(logging_folder_name, exist_ok=True)
     cad_per_class = distillationconfig.getint("cad_per_class")
     num_points = shapenetconfig.getint("num_points")
     batch_size = distillationconfig.getint("batch_size")
@@ -166,14 +169,15 @@ def init():
     if(DEBUG):
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         
-        logging_file_path = os.path.join(defconfig.get("log_dir"),exp_file_name)
+        logging_file_path = os.path.join(logging_folder_name,defconfig.get("log_folder_name"))
         print(logging_file_path)
         file_handler = logging.FileHandler(logging_file_path+".txt")
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
         log_string("INI Config Reading [DEFAULT] section:" + str(dict(defconfig)))
-        tensorboard_path = os.path.join(defconfig.get("tensorboard_dir"),exp_file_name)
+        tensorboard_path = os.path.join(logging_folder_name, defconfig.get("tensorboard_folder_name"))
+        os.makedirs(tensorboard_path, exist_ok=True)
         summary_writer = SummaryWriter(log_dir=tensorboard_path)
 
 def get_class_name_from_id(val):
