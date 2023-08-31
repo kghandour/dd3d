@@ -140,6 +140,10 @@ def init():
         default=True,
         help="Log this trial? Default is True",
     )
+    parser.add_argument(
+        "--exp",
+        default=None,
+    )
     args = parser.parse_args()
     DEBUG = args.log
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -152,7 +156,8 @@ def init():
     mnistconfig = config["MNIST"]
     date_time = now.strftime("%Y%m%d%H%M%S")
     num_workers = defconfig.getint("num_workers")
-    exp_file_name = date_time+"_"+defconfig.get("experiment_name")
+    experiment_name = args.exp if args.exp is not None else defconfig.get("experiment_name")
+    exp_file_name = date_time+"_"+experiment_name
     cad_per_class = distillationconfig.getint("cad_per_class")
     num_points = shapenetconfig.getint("num_points")
     batch_size = distillationconfig.getint("batch_size")
