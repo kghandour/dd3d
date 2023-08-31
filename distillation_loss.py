@@ -73,7 +73,7 @@ def distance_mse(gwr, gws):
 
 def match_loss(gw_syn, gw_real, dis_metric, device):
     dis = torch.tensor(0.0).to(device)
-    count_length = [0,0,0,0,0]
+    count_length = [0,0,0,0,0,0,0]
     if dis_metric == "ours":
         for ig in range(len(gw_real)):
             count_length[len(gw_real[ig].shape)]+=1

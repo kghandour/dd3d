@@ -169,9 +169,11 @@ class MEConvExp(ME.MinkowskiNetwork):
         self.D = dimension
         self.full_minkowski = full_minkowski
         self.features = self._make_equal_layers(in_channel, out_channel, embedding_channel)
-        # self.weight_initialization()
+        self.weight_initialization()
         if(not full_minkowski):
-            self.classifier = nn.Linear(100352, 10)
+            self.pytorch_layers = self._make_pytorch_layers(128)
+            self.classifier = nn.Linear(65536, 10)
+            # self.classifier = nn.Linear(100352, 10)
             # self.dense_shape = torch.Size([settings.modelconfig.getint("batch_size"), 128, 1, 28, 28])
         if(full_minkowski):
             self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
@@ -199,16 +201,25 @@ class MEConvExp(ME.MinkowskiNetwork):
 
     def _make_equal_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
-        for d in range(3):
+        for d in range(1):
             layers += [ME.MinkowskiConvolution(in_channel, 128, kernel_size=3, dimension=self.D)]
-            # layers += [ME.MinkowskiInstanceNorm(128)]
+            layers += [ME.MinkowskiInstanceNorm(128)]
             layers += [ME.MinkowskiReLU(inplace=True)]
-            layers += [ME.MinkowskiAvgPooling(kernel_size=2, stride=2, dimension= self.D)]
+            layers += [ME.MinkowskiMaxPooling(kernel_size=2, stride=2, dimension= self.D)]
             in_channel = 128
         if(not self.full_minkowski):
             pass
             # layers += [ME.MinkowskiConvolution(in_channel, 1, kernel_size=1, dimension=self.D)]
 
+        return nn.Sequential(*layers)
+
+    def _make_pytorch_layers(self, in_channel):
+        layers = []
+        for d in range(1):
+            layers += [nn.Conv3d(in_channel, 128, kernel_size=3, padding=3)]
+            layers += [nn.GroupNorm(128, 128, affine=True)]
+            layers += [nn.ReLU(inplace=True)]
+            layers += [nn.MaxPool3d(kernel_size=2, stride=2)]
         return nn.Sequential(*layers)
     
     def weight_initialization(self):
@@ -233,7 +244,9 @@ class MEConvExp(ME.MinkowskiNetwork):
             min_coord, _ = out.C.min(0, keepdim=True)
             min_coord = min_coord[:, 1:].cpu()
             out = out.dense(shape=dense_shape, min_coordinate=min_coord)[0]
-            out = out.view(-1, 100352)
+            # out = out.view(-1, 100352)
+            out = self.pytorch_layers(out)
+            out = out.view(out.size(0), -1)
             # out = out.view(-1, 784)
             # out = out.F.reshape(-1, 2048)
             out = self.classifier(out)
