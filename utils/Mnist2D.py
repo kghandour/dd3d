@@ -113,3 +113,15 @@ class ThresholdTransform(object): ## https://stackoverflow.com/questions/6597920
 
   def __call__(self, x):
     return (x > self.thr).to(x.dtype)  # do not change the data type
+
+
+class TensorDataset(Dataset):
+    def __init__(self, images, labels): # images: n x c x h x w tensor
+        self.images = images.detach().float()
+        self.labels = labels.detach()
+
+    def __getitem__(self, index):
+        return self.images[index], self.labels[index]
+
+    def __len__(self):
+        return self.images.shape[0]

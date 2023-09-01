@@ -1,7 +1,7 @@
 from configs import settings
 from distillation_loss import match_loss
 from models.MEConv import MEConv, create_input_batch, MEConvImage, MEConvExp, MEPytorch
-from utils.Mnist2D import Mnist2Dreal, Mnist2Dsyn, get_dataset, Mnist2D, get_mnist_dataloader
+from utils.Mnist2D import Mnist2Dreal, Mnist2Dsyn, get_dataset, Mnist2D, get_mnist_dataloader, TensorDataset
 from torch.utils.data import DataLoader
 from utils.MinkowskiCollate import stack_collate_fn, minkowski_collate_fn
 import MinkowskiEngine as ME
@@ -15,6 +15,7 @@ import copy
 from torchvision.utils import save_image
 import torch.nn.functional as F
 import time
+from models.MNIST import ConvNet
 
 # def generate_synth(dst_train, num_classes):
 #     ''' organize the real dataset '''
@@ -77,6 +78,77 @@ def export_pcd(arr, c, custom_name="orig"):
         pcd,
     )
 
+def epoch(mode, dataloader, net, optimizer, criterion, aug):
+    loss_avg, acc_avg, num_exp = 0, 0, 0
+    net = net.to(settings.device)
+    criterion = criterion.to(settings.device)
+
+    if mode == 'train':
+        net.train()
+    else:
+        net.eval()
+
+    for i_batch, datum in enumerate(dataloader):
+        img = datum[0].float().to(settings.device)
+        lab = datum[1].long().to(settings.device)
+        n_b = lab.shape[0]
+
+        output = net(img)
+        loss = criterion(output, lab)
+        acc = np.sum(np.equal(np.argmax(output.cpu().data.numpy(), axis=-1), lab.cpu().data.numpy()))
+
+        loss_avg += loss.item()*n_b
+        acc_avg += acc
+        num_exp += n_b
+
+        if mode == 'train':
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+    loss_avg /= num_exp
+    acc_avg /= num_exp
+
+    return loss_avg, acc_avg
+
+def get_time():
+    return str(time.strftime("[%Y-%m-%d %H:%M:%S]", time.localtime()))
+
+def populate_img(occ_grid, img_array):
+    for idx, digit in enumerate(occ_grid):
+        for pt in digit:
+            newpt = pt.type(torch.LongTensor)
+            img_array[idx,0,newpt[1],newpt[2]]=1
+    return img_array
+def evaluate_synset(it_eval, net, images_train, labels_train, testloader):
+    net = net.to(settings.device)
+    images_train = images_train.to(settings.device)
+    labels_train = labels_train.to(settings.device)
+    lr = float(settings.modelconfig.getfloat("classifier_lr"))
+    Epoch = 300
+    lr_schedule = [Epoch//2+1]
+    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=0.0005)
+    criterion = nn.CrossEntropyLoss().to(settings.device)
+    mnist_imgs = torch.zeros(size=(images_train.shape[0], 1, 28, 28), dtype=torch.float, device=settings.device)
+    mnist_imgs = populate_img(images_train, mnist_imgs)
+    save_name = os.path.join(export_cad_dir, 'vis_iter%d.png'%(iteration))
+    save_image(mnist_imgs, save_name, nrow=settings.cad_per_class)
+    dst_train = TensorDataset(mnist_imgs, labels_train)
+    trainloader = torch.utils.data.DataLoader(dst_train, batch_size=256, shuffle=True, num_workers=0)
+
+    start = time.time()
+    for ep in range(Epoch+1):
+        loss_train, acc_train = epoch('train', trainloader, net, optimizer, criterion, aug = False)
+        if ep in lr_schedule:
+            lr *= 0.1
+            optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=0.0005)
+
+    time_train = time.time() - start
+    loss_test, acc_test = epoch('test', testloader, net, optimizer, criterion, aug = False)
+    print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, Epoch, int(time_train), loss_train, acc_train, acc_test))
+
+    return net, acc_train, acc_test
+
 def get_images(c, n): # get random n images from class c
     # print(c)
     idx_shuffle = np.random.permutation(indices_class[c])[:n]
@@ -135,7 +207,7 @@ if __name__ == "__main__":
 
     pixel_val = False 
     export_cad_once = True
-    minkpyt = False
+    minkpyt = True
     normalized = False
     torch.random.manual_seed(int(time.time() * 1000) % 100000)
 
@@ -152,7 +224,7 @@ if __name__ == "__main__":
     torchsummary(network)
     settings.log_string(network)
     total_iterations = settings.distillationconfig.getint("total_iterations")
-    eval_iteration_pool = [total_iterations-1]
+    eval_iteration_pool = [0, total_iterations//4, total_iterations//2, total_iterations//4+total_iterations//2, total_iterations-1]
     export_cad_dir = os.path.join(settings.logging_folder_name, settings.distillationconfig.get("export_folder_name"))
     os.makedirs(export_cad_dir, exist_ok=True)
 
@@ -213,11 +285,28 @@ if __name__ == "__main__":
             image_syn[:,:,0] = 0
             image_syn.requires_grad_()
 
+        ## Implement the Evaluation classifier here
+
+        if(iteration in eval_iteration_pool):
+        # if(iteration in [0]):
+            settings.log_string("----- Evaluation -----")
+            settings.log_string("Model_train = Convnet2D")
+            settings.log_string("Iteration: "+str(iteration))
+            accs = []
+            for it_eval in range(1):
+                classifier_network = ConvNet(1, 10, 128, 3, 'relu', 'instancenorm', 'avgpooling')
+                image_syn_eval, label_syn_eval = copy.deepcopy(image_syn.detach()), copy.deepcopy(label_syn.detach())
+                _, acc_train, acc_test = evaluate_synset(it_eval, classifier_network, image_syn_eval, label_syn_eval, testloader)
+                accs.append(acc_test)
+                settings.log_tensorboard('Classifier/Acc Train', acc_train, iteration)
+                settings.log_tensorboard('Classifier/Acc Test', acc_test, iteration)
+            
+
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
-                # for batch in get_images(c, settings.modelconfig.getint("batch_size")):
-                for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size"), export_cad_once):
+                for batch in get_images(c, settings.modelconfig.getint("batch_size")):
+                # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size"), export_cad_once):
                 # for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size"), export_cad_once):
                     input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     if(iteration%100 == 0 and normalized): settings.log_string(input)
