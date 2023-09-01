@@ -205,7 +205,7 @@ class MEConvExp(ME.MinkowskiNetwork):
         self.D = dimension
         self.full_minkowski = full_minkowski
         self.features = self._make_equal_layers(in_channel, out_channel, embedding_channel)
-        self.weight_initialization()
+        # self.weight_initialization()
         self.classifier = nn.Linear(100352, 10)
 
     def _make_equal_layers(self, in_channel, out_channel, embedding_channel):

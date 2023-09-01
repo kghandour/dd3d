@@ -107,7 +107,7 @@ def get_1_pt_fixed(c, n, export_cad_once):
     # img_real = torch.tensor([[[0, 10, 10], [0, 20, 20], [0, 10, 20]]], device=settings.device) # Not working
     # img_real = torch.tensor([[[0, 0.5, 0.5]]], device=settings.device) #  working
     # img_real = torch.tensor([[[0, 20.0, 20.0]]], device=settings.device) # Working with S: 0.1 
-    img_real = torch.tensor([[[0, 3, 3], [0.0, 6, 6]]], device=settings.device) # Working with S: 0.1 
+    img_real = torch.tensor([[[0, 3, 3], [0, 3, 6], [0.0, 6, 6], [0, 6, 3]]], device=settings.device)
 
 
     # img_real = torch.tensor([[[0, 3, 3]]], device=settings.device)
@@ -183,7 +183,7 @@ if __name__ == "__main__":
         # image_syn = torch.tensor([[[0,1,1], [0, 27, 27], [0,15,15]]], dtype=torch.float, device=settings.device) # NOT Working
         # image_syn = torch.tensor([[[0,1,1], [0, 2, 2], [0,1,2]]], dtype=torch.float, device=settings.device) # NOT Working
         # image_syn = torch.tensor([[[0,0.1,0.1]]], dtype=torch.float, device=settings.device) # Working
-        image_syn = torch.tensor([[[0,1,1], [0, 9, 9]]], dtype=torch.float, device=settings.device) # 
+        image_syn = torch.tensor([[[0,3,3], [0, 8, 1], [0, 4,9], [0, 10, 11]]], dtype=torch.float, device=settings.device) # 
 
 
 
@@ -219,28 +219,32 @@ if __name__ == "__main__":
                 # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size"), export_cad_once):
                 for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size"), export_cad_once):
                     export_cad_once = False
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.5)
                     if(iteration%100 == 0): settings.log_string(input)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
                     output = network(input)
+                    print(output, batch['labels'])
                     # print(output.shape)
                     loss_real = criterion(output, batch['labels'])
-                    tag_name = "Distillation/Real Digit:"+str(c)+" Loss"
                     if(iteration %100 == 0): 
-                        settings.log_tensorboard(tag_name, loss_real.item(), iteration)
+                        settings.log_tensorboard_str("Distillation/Real Digit:"+str(c)+" Output", str(output), iteration)
+                        settings.log_tensorboard("Distillation/Real Digit:"+str(c)+" Loss", loss_real.item(), iteration)
                     gw_real = torch.autograd.grad(loss_real, net_parameters)
                     gw_real = list((_.detach().clone() for _ in gw_real))
                     # print(input)
                     # print(output)
                     # print(loss_real)
                 for batch in generate_synth_dataloader(c):
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.5)
                     if(iteration%100 == 0): settings.log_string(input)
                     output = network(input)
                     loss_syn = criterion(output, batch['labels'])
-                    tag_name = "Distillation/Synthetic Digit:"+str(c)+" Loss"
-                    if(iteration %100 == 0): settings.log_tensorboard(tag_name, loss_syn.item(), iteration)
+                    print(output, batch['labels'])
+                    exit()
+                    if(iteration %100 == 0): 
+                        settings.log_tensorboard_str("Distillation/Synthetic Digit:"+str(c)+" Output", str(output), iteration)
+                        settings.log_tensorboard("Distillation/Synthetic Digit:"+str(c)+" Loss", loss_syn.item(), iteration)
                     gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
                     # print(input)
                     # print(output)
@@ -256,7 +260,7 @@ if __name__ == "__main__":
             # exit()
             # scheduler.step()
             loss_avg += loss.item()
-            # torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
         loss_avg /= (num_classes*outer_loop)
         log_loss.append(loss_avg)
