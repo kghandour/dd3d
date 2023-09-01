@@ -164,13 +164,12 @@ class MEConvImage(ME.MinkowskiNetwork):
         return out    
 
 class MEPytorch(ME.MinkowskiNetwork):
-    def __init__(self, in_channel, out_channel, dimension):
+    def __init__(self, in_channel, out_channel, dimension=3):
         ME.MinkowskiNetwork.__init__(self, dimension)
         self.D = dimension
-        self.mink = self._make_mink_layers(in_channel, 128)
-        self.pyt = self._make_pytorch_layers(128, out_channel)
-        self.classifier = nn.Linear(65536, 10)
-        self.weight_initialization()
+        # self.mink = self._make_mink_layers(in_channel, 128)
+        self.pyt = self._make_pytorch_layers(in_channel, 10)
+        self.classifier = nn.Linear(1470, 10)
 
     def _make_equal_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
@@ -188,17 +187,28 @@ class MEPytorch(ME.MinkowskiNetwork):
     
     def _make_pytorch_layers(self, in_channel, out_channel):
         layers = []
-        net_depth = 1
+        net_depth = 3
         out_c = 128
         for d in range(net_depth):
             if(d == net_depth -1):
                 out_c = out_channel
             layers += [nn.Conv3d(in_channel, out_c, kernel_size=3, padding=3)]
-            layers += [nn.GroupNorm(out_c, out_c, affine=True)]
+            # layers += [nn.GroupNorm(out_c, out_c, affine=True)]
             layers += [nn.ReLU(inplace=True)]
             layers += [nn.MaxPool3d(kernel_size=2, stride=2)]
+            in_channel = 128
         return nn.Sequential(*layers)
-
+    
+    def forward(self, x: ME.TensorField):
+        out = x.sparse()
+        dense_shape = torch.Size([int(torch.max(x.C, dim=0).values[0].item())+1, 3, 1, 28, 28])
+        min_coord, _ = out.C.min(0, keepdim=True)
+        min_coord = min_coord[:, 1:].cpu()
+        out = out.dense(shape=dense_shape, min_coordinate=min_coord)[0]
+        out = self.pyt(out)
+        out = out.view(out.size(0), -1)
+        out = self.classifier(out)
+        return out
 class MEConvExp(ME.MinkowskiNetwork):
     def __init__(self, in_channel, out_channel, embedding_channel=1024, dimension=3, full_minkowski=False):
         ME.MinkowskiNetwork.__init__(self, dimension)
@@ -206,12 +216,16 @@ class MEConvExp(ME.MinkowskiNetwork):
         self.full_minkowski = full_minkowski
         self.features = self._make_equal_layers(in_channel, out_channel, embedding_channel)
         # self.weight_initialization()
-        self.classifier = nn.Linear(100352, 10)
+        self.classifier = nn.Linear(7840, 10)
 
     def _make_equal_layers(self, in_channel, out_channel, embedding_channel):
         layers = []
-        for d in range(2):
-            layers += [ME.MinkowskiConvolution(in_channel, 128, kernel_size=3, dimension=self.D)]
+        net_depth = 3
+        out_c = 128
+        for d in range(net_depth):
+            if(d == net_depth-1):
+                out_c = out_channel
+            layers += [ME.MinkowskiConvolution(in_channel, out_c, kernel_size=3, dimension=self.D)]
             # layers += [ME.MinkowskiInstanceNorm(128)]
             layers += [ME.MinkowskiReLU(inplace=True)]
             layers += [ME.MinkowskiMaxPooling(kernel_size=2, stride=2, dimension= self.D)]
@@ -237,11 +251,11 @@ class MEConvExp(ME.MinkowskiNetwork):
         out = x.sparse()
         out = self.features(out)
         if(not self.full_minkowski):
-            dense_shape = torch.Size([int(torch.max(x.C, dim=0).values[0].item())+1, 1, 1, 28, 28])
+            dense_shape = torch.Size([int(torch.max(x.C, dim=0).values[0].item())+1, 10, 1, 28, 28])
             min_coord, _ = out.C.min(0, keepdim=True)
             min_coord = min_coord[:, 1:].cpu()
             out = out.dense(shape=dense_shape, min_coordinate=min_coord)[0]
-            out = out.view(-1, 100352)
+            out = out.view(-1, 7840)
             out = self.classifier(out)
 
         return out    

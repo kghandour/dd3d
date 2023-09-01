@@ -107,7 +107,7 @@ def get_1_pt_fixed(c, n, export_cad_once):
     # img_real = torch.tensor([[[0, 10, 10], [0, 20, 20], [0, 10, 20]]], device=settings.device) # Not working
     # img_real = torch.tensor([[[0, 0.5, 0.5]]], device=settings.device) #  working
     # img_real = torch.tensor([[[0, 20.0, 20.0]]], device=settings.device) # Working with S: 0.1 
-    img_real = torch.tensor([[[0, 3, 3], [0, 3, 6], [0.0, 6, 6], [0, 6, 3]]], device=settings.device)
+    img_real = torch.tensor([[[0, 0.7, 0.7], [0, 0.3, 0.3]]], device=settings.device)
 
 
     # img_real = torch.tensor([[[0, 3, 3]]], device=settings.device)
@@ -136,12 +136,12 @@ if __name__ == "__main__":
     pixel_val = False 
     export_cad_once = True
     minkpyt = False
-    normalized = True
+    normalized = False
     torch.random.manual_seed(int(time.time() * 1000) % 100000)
 
     outer_loop, inner_loop = 1, 1
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(pixel_val)
-    num_classes = 1
+    num_classes = 10
     train_loader = DataLoader(dst_train, batch_size=settings.batch_size, shuffle=True, collate_fn=minkowski_collate_fn)
     if(pixel_val): in_c = 1 
     else: in_c = 3
@@ -177,13 +177,13 @@ if __name__ == "__main__":
         # image_syn = F.normalize(image_syn).requires_grad_()
         # image_syn = torch.randn(size=(num_classes*settings.cad_per_class, im_size[0] * im_size[1], 1), dtype=torch.float, requires_grad=True, device=settings.device)
     else:
-        # image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device) 
+        image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device) 
         # image_syn = torch.tensor([[[0,0,0], [0,10,10]]], dtype=torch.float, device=settings.device)
         # image_syn = torch.tensor([[[0,1,1], [0, 3, 9], [0,9,9]]], dtype=torch.float, device=settings.device) # Working configuration
         # image_syn = torch.tensor([[[0,1,1], [0, 27, 27], [0,15,15]]], dtype=torch.float, device=settings.device) # NOT Working
         # image_syn = torch.tensor([[[0,1,1], [0, 2, 2], [0,1,2]]], dtype=torch.float, device=settings.device) # NOT Working
         # image_syn = torch.tensor([[[0,0.1,0.1]]], dtype=torch.float, device=settings.device) # Working
-        image_syn = torch.tensor([[[0,3,3], [0, 8, 1], [0, 4,9], [0, 10, 11]]], dtype=torch.float, device=settings.device) # 
+        # image_syn = torch.tensor([[[0,0.1,0.1], [0, 0.9, 0.9]]], dtype=torch.float, device=settings.device) # 
 
 
 
@@ -212,19 +212,18 @@ if __name__ == "__main__":
                 image_syn[image_syn>27]=27
             image_syn[:,:,0] = 0
             image_syn.requires_grad_()
+
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
                 # for batch in get_images(c, settings.modelconfig.getint("batch_size")):
-                # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size"), export_cad_once):
-                for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size"), export_cad_once):
-                    export_cad_once = False
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.5)
-                    if(iteration%100 == 0): settings.log_string(input)
+                for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size"), export_cad_once):
+                # for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size"), export_cad_once):
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                    if(iteration%100 == 0 and normalized): settings.log_string(input)
                     # print(input.shape)
                     # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
                     output = network(input)
-                    print(output, batch['labels'])
                     # print(output.shape)
                     loss_real = criterion(output, batch['labels'])
                     if(iteration %100 == 0): 
@@ -236,12 +235,10 @@ if __name__ == "__main__":
                     # print(output)
                     # print(loss_real)
                 for batch in generate_synth_dataloader(c):
-                    input = create_input_batch(batch, True, device=settings.device, quantization_size=0.5)
-                    if(iteration%100 == 0): settings.log_string(input)
+                    input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
+                    if(iteration%100 == 0 and normalized): settings.log_string(input)
                     output = network(input)
                     loss_syn = criterion(output, batch['labels'])
-                    print(output, batch['labels'])
-                    exit()
                     if(iteration %100 == 0): 
                         settings.log_tensorboard_str("Distillation/Synthetic Digit:"+str(c)+" Output", str(output), iteration)
                         settings.log_tensorboard("Distillation/Synthetic Digit:"+str(c)+" Loss", loss_syn.item(), iteration)
@@ -250,6 +247,7 @@ if __name__ == "__main__":
                     # print(output)
                     # print(loss_syn)
                 loss += match_loss(gw_syn, gw_real, settings.modelconfig.get("dist_opt"), settings.device)
+            export_cad_once = False
             optimizer_img.zero_grad()
             loss.backward()
             if(iteration%100==0): settings.log_tensorboard_str('Image Syn grad:', str(image_syn.grad), iteration)
