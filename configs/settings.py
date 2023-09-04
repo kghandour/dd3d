@@ -63,6 +63,10 @@ def log_tensorboard(tag, scalar_value, global_step):
     if(DEBUG):
         summary_writer.add_scalar(tag=tag, scalar_value=scalar_value, global_step=global_step)
 
+def log_tensorboard_image(tag, img_tensor, global_step):
+    if(DEBUG):
+        summary_writer.add_image(tag=tag, img_tensor=img_tensor,dataformats="CHW", global_step=global_step)
+
 def log_tensorboard_str(tag, text, global_step):
     if(DEBUG):
         summary_writer.add_text(tag, text, global_step)
@@ -130,12 +134,14 @@ def init():
     global num_points
     global batch_size
     global logging_folder_name
+    global Pyt
 
     cad_paths_all = []
     labels_all = []
     indices_class = []
 
     num_classes = 55
+    Pyt = False
 
     now = datetime.now()
     parser = argparse.ArgumentParser(description="Parameter Processing")

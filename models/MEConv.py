@@ -169,7 +169,7 @@ class MEPytorch(ME.MinkowskiNetwork):
         self.D = dimension
         # self.mink = self._make_mink_layers(in_channel, 128)
         self.pyt = self._make_pytorch_layers(in_channel, 128)
-        self.classifier = nn.Linear(18816, 10)
+        self.classifier = nn.Linear(1152, 10)
     
     def _make_pytorch_layers(self, in_channel, out_channel):
         layers = []
@@ -178,7 +178,8 @@ class MEPytorch(ME.MinkowskiNetwork):
         for d in range(net_depth):
             if(d == net_depth -1):
                 out_c = out_channel
-            layers += [nn.Conv3d(in_channel, out_c, kernel_size=3, padding=3)]
+            # layers += [nn.Conv3d(in_channel, out_c, kernel_size=(1,3,3), padding=1)]
+            layers += [nn.Conv3d(in_channel, out_c, kernel_size=(1,3,3), padding=1)]
             # layers += [nn.GroupNorm(out_c, out_c, affine=True)]
             layers += [nn.ReLU(inplace=True)]
             layers += [nn.MaxPool3d(kernel_size=2, stride=2)]

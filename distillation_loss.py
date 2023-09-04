@@ -32,8 +32,13 @@ def distance_wb(gwr, gws):
         gwr = gwr.reshape(shape[0], shape[1] * shape[2] * shape[3])
         gws = gws.reshape(shape[0], shape[1] * shape[2] * shape[3])
     elif len(shape) == 3:  # layernorm, C*h*w
+        if(not settings.Pyt):
+            gwr = torch.permute(gwr, (2, 1, 0))
+            gws = torch.permute(gws, (2, 1, 0))
+            shape = gwr.shape
         gwr = gwr.reshape(shape[0], shape[1] * shape[2])
         gws = gws.reshape(shape[0], shape[1] * shape[2])
+
     elif len(shape) == 2:  # linear, out*in
         tmp = "do nothing"
     elif len(shape) == 1:  # batchnorm/instancenorm, C; groupnorm x, bias
@@ -58,6 +63,10 @@ def distance_mse(gwr, gws):
         gwr = gwr.reshape(shape[0], shape[1] * shape[2] * shape[3])
         gws = gws.reshape(shape[0], shape[1] * shape[2] * shape[3])
     elif len(shape) == 3:  # layernorm, C*h*w
+        if(not settings.Pyt):
+            gwr = torch.permute(gwr, (2, 1, 0))
+            gws = torch.permute(gws, (2, 1, 0))
+            shape = gwr.shape
         gwr = gwr.reshape(shape[0], shape[1] * shape[2])
         gws = gws.reshape(shape[0], shape[1] * shape[2])
     elif len(shape) == 2:  # linear, out*in
@@ -74,14 +83,21 @@ def distance_mse(gwr, gws):
 def match_loss(gw_syn, gw_real, dis_metric, device):
     dis = torch.tensor(0.0).to(device)
     count_length = [0,0,0,0,0,0,0]
+    # settings.log_string("GW Real length "+ str(len(gw_real)))
+    # settings.log_string("GW Synth length "+ str(len(gw_syn)))
+    # settings.log_string("=====")
     if dis_metric == "ours":
         for ig in range(len(gw_real)):
+
             count_length[len(gw_real[ig].shape)]+=1
             gwr = gw_real[ig]
             gws = gw_syn[ig]
             dis += distance_wb(gwr, gws)
     elif dis_metric == "modmse":
         for ig in range(len(gw_real)):
+            # settings.log_string("GW REAL "+str(ig)+ " shape "+ str(gw_real[ig].shape))
+            # settings.log_string("GW Synthetic "+str(ig)+ " shape "+ str(gw_real[ig].shape))
+            # settings.log_string("======")
             count_length[len(gw_real[ig].shape)]+=1
             gwr = gw_real[ig]
             gws = gw_syn[ig]
@@ -110,5 +126,5 @@ def match_loss(gw_syn, gw_real, dis_metric, device):
 
     else:
         exit("unknown distance function: %s" % dis_metric)
-    
+
     return dis

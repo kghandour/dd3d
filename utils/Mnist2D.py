@@ -18,7 +18,7 @@ def get_dataset(pixel_val = False):
     if(pixel_val):
       transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
     else:
-      transform = transforms.Compose([transforms.ToTensor(), ThresholdTransform(thr_255=80)])
+      transform = transforms.Compose([transforms.ToTensor(), ThresholdTransform(thr_255=75)])
     dst_train = datasets.MNIST(data_path, train=True, download=True, transform=transform) # no augmentation
     dst_test = datasets.MNIST(data_path, train=False, download=True, transform=transform)
     class_names = [str(c) for c in range(num_classes)]

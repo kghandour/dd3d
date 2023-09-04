@@ -12,10 +12,12 @@ import math
 import open3d as o3d
 from torchinfo import summary as torchsummary
 import copy
-from torchvision.utils import save_image
+from torchvision.utils import save_image, make_grid
 import torch.nn.functional as F
 import time
 from models.MNIST import ConvNet
+from scipy.ndimage.interpolation import rotate as scipyrotate
+
 
 # def generate_synth(dst_train, num_classes):
 #     ''' organize the real dataset '''
@@ -78,6 +80,67 @@ def export_pcd(arr, c, custom_name="orig"):
         pcd,
     )
 
+def augment(images, device):
+    # This can be sped up in the future.
+    dc_aug_param = {'crop': 4, 'scale': 0.2, 'rotate': 45, 'noise': 0.001, 'strategy': 'crop_scale_rotate'}
+    if dc_aug_param != None and dc_aug_param['strategy'] != 'none':
+        scale = dc_aug_param['scale']
+        crop = dc_aug_param['crop']
+        rotate = dc_aug_param['rotate']
+        noise = dc_aug_param['noise']
+        strategy = dc_aug_param['strategy']
+
+        shape = images.shape
+        mean = []
+        for c in range(shape[1]):
+            mean.append(float(torch.mean(images[:,c])))
+
+        def cropfun(i):
+            im_ = torch.zeros(shape[1],shape[2]+crop*2,shape[3]+crop*2, dtype=torch.float, device=device)
+            for c in range(shape[1]):
+                im_[c] = mean[c]
+            im_[:, crop:crop+shape[2], crop:crop+shape[3]] = images[i]
+            r, c = np.random.permutation(crop*2)[0], np.random.permutation(crop*2)[0]
+            images[i] = im_[:, r:r+shape[2], c:c+shape[3]]
+
+        def scalefun(i):
+            h = int((np.random.uniform(1 - scale, 1 + scale)) * shape[2])
+            w = int((np.random.uniform(1 - scale, 1 + scale)) * shape[2])
+            tmp = F.interpolate(images[i:i + 1], [h, w], )[0]
+            mhw = max(h, w, shape[2], shape[3])
+            im_ = torch.zeros(shape[1], mhw, mhw, dtype=torch.float, device=device)
+            r = int((mhw - h) / 2)
+            c = int((mhw - w) / 2)
+            im_[:, r:r + h, c:c + w] = tmp
+            r = int((mhw - shape[2]) / 2)
+            c = int((mhw - shape[3]) / 2)
+            images[i] = im_[:, r:r + shape[2], c:c + shape[3]]
+
+        def rotatefun(i):
+            im_ = scipyrotate(images[i].cpu().data.numpy(), angle=np.random.randint(-rotate, rotate), axes=(-2, -1), cval=np.mean(mean))
+            r = int((im_.shape[-2] - shape[-2]) / 2)
+            c = int((im_.shape[-1] - shape[-1]) / 2)
+            images[i] = torch.tensor(im_[:, r:r + shape[-2], c:c + shape[-1]], dtype=torch.float, device=device)
+
+        def noisefun(i):
+            images[i] = images[i] + noise * torch.randn(shape[1:], dtype=torch.float, device=device)
+
+
+        augs = strategy.split('_')
+
+        for i in range(shape[0]):
+            choice = np.random.permutation(augs)[0] # randomly implement one augmentation
+            if choice == 'crop':
+                cropfun(i)
+            elif choice == 'scale':
+                scalefun(i)
+            elif choice == 'rotate':
+                rotatefun(i)
+            elif choice == 'noise':
+                noisefun(i)
+
+    return images
+
 def epoch(mode, dataloader, net, optimizer, criterion, aug):
     loss_avg, acc_avg, num_exp = 0, 0, 0
     net = net.to(settings.device)
@@ -90,6 +153,7 @@ def epoch(mode, dataloader, net, optimizer, criterion, aug):
 
     for i_batch, datum in enumerate(dataloader):
         img = datum[0].float().to(settings.device)
+        img = augment(img, settings.device)
         lab = datum[1].long().to(settings.device)
         n_b = lab.shape[0]
 
@@ -120,7 +184,7 @@ def populate_img(occ_grid, img_array):
             newpt = pt.type(torch.LongTensor)
             img_array[idx,0,newpt[1],newpt[2]]=1
     return img_array
-def evaluate_synset(it_eval, net, images_train, labels_train, testloader):
+def evaluate_synset(it_eval, net, images_train, labels_train, testloader, iteration):
     net = net.to(settings.device)
     images_train = images_train.to(settings.device)
     labels_train = labels_train.to(settings.device)
@@ -133,6 +197,7 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader):
     mnist_imgs = populate_img(images_train, mnist_imgs)
     save_name = os.path.join(export_cad_dir, 'vis_iter%d.png'%(iteration))
     save_image(mnist_imgs, save_name, nrow=settings.cad_per_class)
+    settings.log_tensorboard_image("Distillation/Images", make_grid(mnist_imgs, nrow=settings.cad_per_class), iteration)
     dst_train = TensorDataset(mnist_imgs, labels_train)
     trainloader = torch.utils.data.DataLoader(dst_train, batch_size=256, shuffle=True, num_workers=0)
 
@@ -208,6 +273,7 @@ if __name__ == "__main__":
     pixel_val = False 
     export_cad_once = True
     minkpyt = True
+    settings.Pyt = minkpyt
     normalized = False
     torch.random.manual_seed(int(time.time() * 1000) % 100000)
 
@@ -222,9 +288,10 @@ if __name__ == "__main__":
     else:
         network = MEConvExp(in_channel=in_c, out_channel=10).to(settings.device)
     torchsummary(network)
+    network.train()
     settings.log_string(network)
     total_iterations = settings.distillationconfig.getint("total_iterations")
-    eval_iteration_pool = [0, total_iterations//4, total_iterations//2, total_iterations//4+total_iterations//2, total_iterations-1]
+    eval_iteration_pool = [0, 250, total_iterations//4, total_iterations//2, total_iterations//4+total_iterations//2, total_iterations-1]
     export_cad_dir = os.path.join(settings.logging_folder_name, settings.distillationconfig.get("export_folder_name"))
     os.makedirs(export_cad_dir, exist_ok=True)
 
@@ -296,7 +363,7 @@ if __name__ == "__main__":
             for it_eval in range(1):
                 classifier_network = ConvNet(1, 10, 128, 3, 'relu', 'instancenorm', 'avgpooling')
                 image_syn_eval, label_syn_eval = copy.deepcopy(image_syn.detach()), copy.deepcopy(label_syn.detach())
-                _, acc_train, acc_test = evaluate_synset(it_eval, classifier_network, image_syn_eval, label_syn_eval, testloader)
+                _, acc_train, acc_test = evaluate_synset(it_eval, classifier_network, image_syn_eval, label_syn_eval, testloader, iteration)
                 accs.append(acc_test)
                 settings.log_tensorboard('Classifier/Acc Train', acc_train, iteration)
                 settings.log_tensorboard('Classifier/Acc Test', acc_test, iteration)
@@ -335,14 +402,19 @@ if __name__ == "__main__":
                     # print(input)
                     # print(output)
                     # print(loss_syn)
-                loss += match_loss(gw_syn, gw_real, settings.modelconfig.get("dist_opt"), settings.device)
+                matched_loss = match_loss(gw_syn, gw_real, settings.modelconfig.get("dist_opt"), settings.device)
+                loss += matched_loss
+                settings.log_tensorboard("Matched Loss/ Digit "+ str(c), matched_loss.item(), iteration)
             export_cad_once = False
             optimizer_img.zero_grad()
             loss.backward()
             if(iteration%100==0): settings.log_tensorboard_str('Image Syn grad:', str(image_syn.grad), iteration)
-            # nn.utils.clip_grad_norm_([image_syn, ], 1.0)
+            if(iteration%100==0): settings.log_tensorboard("Distillation/Mean Gradient", torch.mean(image_syn.grad), iteration)
+            old_image_syn = image_syn.clone().detach()
             optimizer_img.step()
-            if(iteration%100==0): settings.log_tensorboard_str('Image Syn new point:', str(image_syn), iteration)
+            if(iteration%100==0): 
+                settings.log_tensorboard_str('Image Syn new point:', str(image_syn), iteration)
+                settings.log_tensorboard("Distillation/Mean Point Absolute difference", torch.mean(torch.abs(image_syn - old_image_syn)), iteration)
             # print(image_syn)
             # exit()
             # scheduler.step()
