@@ -189,7 +189,7 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, iterat
     images_train = images_train.to(settings.device)
     labels_train = labels_train.to(settings.device)
     lr = float(settings.modelconfig.getfloat("classifier_lr"))
-    Epoch = 300
+    Epoch = 1000
     lr_schedule = [Epoch//2+1]
     optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=0.0005)
     criterion = nn.CrossEntropyLoss().to(settings.device)
@@ -197,7 +197,8 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, iterat
     mnist_imgs = populate_img(images_train, mnist_imgs)
     save_name = os.path.join(export_cad_dir, 'vis_iter%d.png'%(iteration))
     save_image(mnist_imgs, save_name, nrow=settings.cad_per_class)
-    settings.log_tensorboard_image("Distillation/Images", make_grid(mnist_imgs, nrow=settings.cad_per_class), iteration)
+    if(it_eval==0):
+        settings.log_tensorboard_image("Distillation/Images", make_grid(mnist_imgs, nrow=settings.cad_per_class), iteration)
     dst_train = TensorDataset(mnist_imgs, labels_train)
     trainloader = torch.utils.data.DataLoader(dst_train, batch_size=256, shuffle=True, num_workers=0)
 
@@ -272,7 +273,7 @@ if __name__ == "__main__":
 
     pixel_val = False 
     export_cad_once = True
-    minkpyt = True
+    minkpyt = False
     settings.Pyt = minkpyt
     normalized = False
     torch.random.manual_seed(int(time.time() * 1000) % 100000)
@@ -360,13 +361,12 @@ if __name__ == "__main__":
             settings.log_string("Model_train = Convnet2D")
             settings.log_string("Iteration: "+str(iteration))
             accs = []
-            for it_eval in range(1):
+            for it_eval in range(5):
                 classifier_network = ConvNet(1, 10, 128, 3, 'relu', 'instancenorm', 'avgpooling')
                 image_syn_eval, label_syn_eval = copy.deepcopy(image_syn.detach()), copy.deepcopy(label_syn.detach())
                 _, acc_train, acc_test = evaluate_synset(it_eval, classifier_network, image_syn_eval, label_syn_eval, testloader, iteration)
                 accs.append(acc_test)
-                settings.log_tensorboard('Classifier/Acc Train', acc_train, iteration)
-                settings.log_tensorboard('Classifier/Acc Test', acc_test, iteration)
+                settings.log_tensorboard('Classifier/Acc Test Eval '+str(it_eval), acc_test, iteration)
             
 
         for ol in range(outer_loop):
@@ -409,7 +409,7 @@ if __name__ == "__main__":
             optimizer_img.zero_grad()
             loss.backward()
             if(iteration%100==0): settings.log_tensorboard_str('Image Syn grad:', str(image_syn.grad), iteration)
-            if(iteration%100==0): settings.log_tensorboard("Distillation/Mean Gradient", torch.mean(image_syn.grad), iteration)
+            if(iteration%100==0): settings.log_tensorboard("Distillation/Mean Gradient", torch.mean(torch.abs(image_syn.grad)), iteration)
             old_image_syn = image_syn.clone().detach()
             optimizer_img.step()
             if(iteration%100==0): 
