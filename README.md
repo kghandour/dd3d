@@ -5,6 +5,10 @@ Figure 1: Overview of the main pipeline
 ![Distillation Block](assets/DistillationBlock.png)
 Figure 2: Pipeline of the Distillation Block
 
+![Distillation Results from using Pytorch Implementation (Top) and MinkowskiEngine (Bottom)](assets/MNIST.png)
+
+Figure 3: Distillation results of MNIST pointclouds after projecting to image space. Top: Pytorch implementation. Bottom: MinkowskiEngine implementation.
+
 [Report](assets/Report.pdf)
 
 ## Abstract
