@@ -32,7 +32,7 @@ Update `configs/default.ini` important fields:
 - `logging_parent` stands for the destination of your logging files
 - `distillation_checkpoint_dir` stands for the destination of your checkpoint saves
 
-### 3. Running the Distillation
+### 4. Running the Distillation
 ```
 python mnist_distill.py
 ```
