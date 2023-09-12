@@ -222,7 +222,7 @@ class MEConvExp(ME.MinkowskiNetwork):
             if(d == net_depth-1):
                 out_c = out_channel
             layers += [ME.MinkowskiConvolution(in_channel, out_c, kernel_size=3, dimension=self.D)]
-            # layers += [ME.MinkowskiInstanceNorm(128)]
+            layers += [ME.MinkowskiInstanceNorm(128)]
             layers += [ME.MinkowskiReLU(inplace=True)]
             layers += [ME.MinkowskiMaxPooling(kernel_size=2, stride=2, dimension= self.D)]
             in_channel = 128

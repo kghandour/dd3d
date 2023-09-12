@@ -22,7 +22,6 @@ def get_dataset(pixel_val = False):
     dst_train = datasets.MNIST(data_path, train=True, download=True, transform=transform) # no augmentation
     dst_test = datasets.MNIST(data_path, train=False, download=True, transform=transform)
     class_names = [str(c) for c in range(num_classes)]
-
     testloader = torch.utils.data.DataLoader(dst_test, batch_size=256, shuffle=False, num_workers=settings.num_workers)
     return channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader
 class Mnist2D(datasets.MNIST):

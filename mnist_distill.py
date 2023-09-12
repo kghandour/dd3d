@@ -1,3 +1,8 @@
+'''
+This code is based on Zhao et al. Dataset Condensation using Gradient Matching (2020).
+Original source code for the paper can be found here: 
+https://github.com/VICO-UoE/DatasetCondensation
+'''
 from configs import settings
 from distillation_loss import match_loss
 from models.MEConv import MEConv, create_input_batch, MEConvImage, MEConvExp, MEPytorch
@@ -17,29 +22,6 @@ import torch.nn.functional as F
 import time
 from models.MNIST import ConvNet
 from scipy.ndimage.interpolation import rotate as scipyrotate
-
-
-# def generate_synth(dst_train, num_classes):
-#     ''' organize the real dataset '''
-#     global indices_class, images_all, labels_all, image_syn, label_syn
-
-#     indices_class = [[] for c in range(num_classes)]
-#     images_all = [torch.unsqueeze(dst_train[i][0], dim=0) for i in range(len(dst_train))]
-#     labels_all = [dst_train[i][1] for i in range(len(dst_train))]
-#     for i, lab in enumerate(labels_all):
-#         indices_class[lab].append(i)
-#     images_all = torch.cat(images_all, dim=0).to(settings.device)
-#     labels_all = torch.tensor(labels_all, dtype=torch.long, device=settings.device)
-
-#     for c in range(num_classes):
-#         print('class c = %d: %d real images'%(c, len(indices_class[c])))
-
-#     for ch in range(channel):
-#         print('real images channel %d, mean = %.4f, std = %.4f'%(ch, torch.mean(images_all[:, ch]), torch.std(images_all[:, ch])))
-
-#     ''' initialize the synthetic data '''
-#     image_syn = torch.randn(size=(num_classes*settings.cad_per_class, settings.num_points, 3), dtype=torch.float, requires_grad=True, device=settings.device)
-#     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
 
 def export_mnist(arr, c, custom_name="orig"):
     cad_list_copy = arr.clone().detach().cpu().numpy()
@@ -273,8 +255,7 @@ if __name__ == "__main__":
 
     pixel_val = False 
     export_cad_once = True
-    minkpyt = False
-    settings.Pyt = minkpyt
+    minkpyt = settings.Pyt
     normalized = False
     torch.random.manual_seed(int(time.time() * 1000) % 100000)
 
@@ -314,30 +295,12 @@ if __name__ == "__main__":
     syn_shape = (num_classes*settings.cad_per_class, settings.num_points, 3)
     if(pixel_val):
         image_syn = torch.randn(size=(num_classes*settings.cad_per_class, 1, im_size[0], im_size[1]), dtype=torch.float, device=settings.device, requires_grad=True)
-        # image_syn = F.normalize(image_syn).requires_grad_()
-        # image_syn = torch.randn(size=(num_classes*settings.cad_per_class, im_size[0] * im_size[1], 1), dtype=torch.float, requires_grad=True, device=settings.device)
     else:
         image_syn = (28 - 0) * torch.rand(size= syn_shape, dtype=torch.float, device=settings.device) 
-        # image_syn = torch.tensor([[[0,0,0], [0,10,10]]], dtype=torch.float, device=settings.device)
-        # image_syn = torch.tensor([[[0,1,1], [0, 3, 9], [0,9,9]]], dtype=torch.float, device=settings.device) # Working configuration
-        # image_syn = torch.tensor([[[0,1,1], [0, 27, 27], [0,15,15]]], dtype=torch.float, device=settings.device) # NOT Working
-        # image_syn = torch.tensor([[[0,1,1], [0, 2, 2], [0,1,2]]], dtype=torch.float, device=settings.device) # NOT Working
-        # image_syn = torch.tensor([[[0,0.1,0.1]]], dtype=torch.float, device=settings.device) # Working
-        # image_syn = torch.tensor([[[0,0.1,0.1], [0, 0.9, 0.9]]], dtype=torch.float, device=settings.device) # 
-
-
-
-        # image_syn = torch.rand(size= syn_shape, dtype=torch.float, device=settings.device)
-        # image_syn = torch.dstack((torch.zeros((image_syn.shape[0], image_syn.shape[1], 1)).to(settings.device), image_syn)).requires_grad_()
-
-    # while(image_syn.unique(dim=1).shape != syn_shape):
-    #     image_syn = torch.randint(0, 28, size= syn_shape, dtype=torch.float, device=settings.device)
-    #     settings.log_string("Repeated elements found, regenerating again")
+        
     label_syn = torch.tensor(np.array([np.ones(settings.cad_per_class)*i for i in range(num_classes)]), dtype=torch.long, requires_grad=False, device=settings.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
     criterion = nn.CrossEntropyLoss().to(settings.device)
     optimizer_img = torch.optim.SGD([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), momentum=0.5) # optimizer_img for synthetic data
-    # optimizer_img = torch.optim.Adam([image_syn, ], lr=settings.modelconfig.getfloat("dist_lr"), betas=(0.9, 0.999)) # optimizer_img for synthetic data
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer_img, T_max=settings.distillationconfig.getint("total_iterations"))
     optimizer_img.zero_grad()
     net_parameters = list(network.parameters())
     log_loss = []
@@ -353,10 +316,8 @@ if __name__ == "__main__":
             image_syn[:,:,0] = 0
             image_syn.requires_grad_()
 
-        ## Implement the Evaluation classifier here
 
         if(iteration in eval_iteration_pool):
-        # if(iteration in [0]):
             settings.log_string("----- Evaluation -----")
             settings.log_string("Model_train = Convnet2D")
             settings.log_string("Iteration: "+str(iteration))
@@ -372,24 +333,21 @@ if __name__ == "__main__":
         for ol in range(outer_loop):
             loss = torch.tensor(0.0).to(settings.device)
             for c in range(num_classes):
+                loss_real = torch.tensor(0.0).to(settings.device)
+                n_batches = len(get_images(c, settings.modelconfig.getint("batch_size")))
                 for batch in get_images(c, settings.modelconfig.getint("batch_size")):
                 # for batch in get_images_fixed(c, 0, settings.modelconfig.getint("batch_size"), export_cad_once):
                 # for batch in get_1_pt_fixed(c, settings.modelconfig.getint("batch_size"), export_cad_once):
                     input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     if(iteration%100 == 0 and normalized): settings.log_string(input)
-                    # print(input.shape)
-                    # print(np.max(input.coordinates.clone().cpu().numpy(), keepdims=True))
                     output = network(input)
-                    # print(output.shape)
-                    loss_real = criterion(output, batch['labels'])
+                    loss_real += criterion(output, batch['labels'])
                     if(iteration %100 == 0): 
                         settings.log_tensorboard_str("Distillation/Real Digit:"+str(c)+" Output", str(output), iteration)
                         settings.log_tensorboard("Distillation/Real Digit:"+str(c)+" Loss", loss_real.item(), iteration)
-                    gw_real = torch.autograd.grad(loss_real, net_parameters)
-                    gw_real = list((_.detach().clone() for _ in gw_real))
-                    # print(input)
-                    # print(output)
-                    # print(loss_real)
+                loss_real /= n_batches
+                gw_real = torch.autograd.grad(loss_real, net_parameters)
+                gw_real = list((_.detach().clone() for _ in gw_real))
                 for batch in generate_synth_dataloader(c):
                     input = create_input_batch(batch, True, device=settings.device, quantization_size=1)
                     if(iteration%100 == 0 and normalized): settings.log_string(input)
@@ -399,9 +357,6 @@ if __name__ == "__main__":
                         settings.log_tensorboard_str("Distillation/Synthetic Digit:"+str(c)+" Output", str(output), iteration)
                         settings.log_tensorboard("Distillation/Synthetic Digit:"+str(c)+" Loss", loss_syn.item(), iteration)
                     gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
-                    # print(input)
-                    # print(output)
-                    # print(loss_syn)
                 matched_loss = match_loss(gw_syn, gw_real, settings.modelconfig.get("dist_opt"), settings.device)
                 loss += matched_loss
                 settings.log_tensorboard("Matched Loss/ Digit "+ str(c), matched_loss.item(), iteration)
@@ -415,16 +370,11 @@ if __name__ == "__main__":
             if(iteration%100==0): 
                 settings.log_tensorboard_str('Image Syn new point:', str(image_syn), iteration)
                 settings.log_tensorboard("Distillation/Mean Point Absolute difference", torch.mean(torch.abs(image_syn - old_image_syn)), iteration)
-            # print(image_syn)
-            # exit()
-            # scheduler.step()
             loss_avg += loss.item()
             torch.cuda.empty_cache()
 
         loss_avg /= (num_classes*outer_loop)
         log_loss.append(loss_avg)
-        # settings.log_string("Iteration "+str(iteration)+" Loss:"+str(loss_avg))
-        # settings.log_tensorboard("Distillation/Matched Loss",loss_avg, iteration)
         if(iteration%100 ==0):
             loss_value = sum(log_loss)/len(log_loss)
             settings.log_string("Iteration: "+str(iteration)+" Loss matched is "+ str(loss_value))
@@ -437,7 +387,6 @@ if __name__ == "__main__":
                 least_loss = loss_value
                 savepath = os.path.join(settings.distillationconfig.get("distillation_checkpoint_dir"), settings.exp_file_name+".pth")
                 settings.log_string('Saving at %s' % savepath)
-                # settings.log_tensorboard_pcd('Point Clouds', get_syn_tensor(0), iteration)
                 state = {
                     'epoch': iteration+1,
                     'least_loss': least_loss,
@@ -457,7 +406,6 @@ if __name__ == "__main__":
                     image_syn_vis[:, ch] = image_syn_vis[:, ch] * std[ch] + mean[ch]
                 image_syn_vis[image_syn_vis<0] = 0.0
                 image_syn_vis[image_syn_vis>1] = 1.0
-                # reshaped = image_syn.reshape(num_classes, settings.cad_per_class, 28, 28)
                 save_name = os.path.join(export_cad_dir, 'vis_iter%d.png'%(iteration))
                 save_image(image_syn_vis, save_name, nrow=settings.cad_per_class)
 

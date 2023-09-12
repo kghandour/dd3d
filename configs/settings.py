@@ -155,6 +155,13 @@ def init():
         "--exp",
         default=None,
     )
+
+    parser.add_argument(
+        '--pytorch',
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help='Convert to dense after creating the batches and use pure pytorch layers'
+    )
     args = parser.parse_args()
     DEBUG = args.log
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -167,6 +174,7 @@ def init():
     mnistconfig = config["MNIST"]
     date_time = now.strftime("%Y%m%d%H%M%S")
     num_workers = defconfig.getint("num_workers")
+    Pyt = args.pytorch
     experiment_name = args.exp if args.exp is not None else defconfig.get("experiment_name")
     exp_file_name = date_time+"_"+experiment_name
     logging_folder_name = os.path.join(defconfig.get("logging_parent"), exp_file_name)
