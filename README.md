@@ -38,3 +38,47 @@ Useful parameters:
 - `--no-log` when debugging this prevents creating tensorboard logs
 - `--exp <NAME>` quickly set the experiment name for each run
 - `--pytorch` uses pytorch architecture instead of Minkowski Engine. (DEFAULT: FALSE)
+
+## Important Files
+- `mnist_distill.py` 
+
+Covers the main pipeline of the distillation and evaluation
+
+- `distillation_loss.py`
+
+Includes the list of distance measurements implemented
+
+- `models/MEConv.py`
+
+Includes the different network architectures. 
+`MEPytorch` covers the architecture used for using pure Pytorch.
+`MEConvExp` covers the arhictecture for using ME.
+
+- `models/MNIST.py`
+
+Includes the classifier network
+
+- `configs/settings.py`
+
+Parses the config file and the CLI arguments and sets the default values for multiple global variables.
+
+- `configs/default.ini`
+
+Is the default configuration file. Includes the directory paths, naming and some network parameters.
+
+## Irrelevant files
+- `run_distill.py`
+
+Includes initial experiments for distilling ShapeNet using PointNet++ 
+
+- `train_classification.py` and `test_classification.py` and `models/pointnet2_ssg_wo_normals/`
+
+Include training pipeline for baseline classifier on ShapeNet that uses PointNet++ as base. These files are heavily based on https://github.com/yanx27/Pointnet_Pointnet2_pytorch
+
+- Additional files in other branches worked to convert ShapeNet to PCD as well as run some analysis on ShapeNet during initial experiments.
+
+## Citations
+- Zhao et al. Dataset Condensation using Gradient Matching (2020) [Github Link](https://github.com/VICO-UoE/DatasetCondensation)
+- MNIST dataset 
+- Choy et al. 4D Spatio-Temporal ConvNets: Minkowski Convolutional Neural Networks [Github Link](https://github.com/NVIDIA/MinkowskiEngine)
+- Xu Yan: PointNet/Pointnet++ Pytorch [Github Link](https://github.com/yanx27/Pointnet_Pointnet2_pytorch) (This implementation is no longer mainly used but is kept in the repository for potential future use.)
